@@ -15,6 +15,7 @@ urlpatterns = [
 
     path('users/', include('apps.users.urls')),
     path('locations/', include('apps.locations.urls')),
+    path('inventory/', include('apps.inventory.urls')),
     path('analytics/', include('apps.analytics.urls')),
     path('notifications/', include('apps.notifications.urls')),
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import sys
 from datetime import timedelta
 from dotenv import load_dotenv
 load_dotenv(override=False)
@@ -115,7 +116,22 @@ WEBSOCKET_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         'WEBSOCKET_ALLOWED_ORIGINS',
-        ','.join(CORS_ALLOWED_ORIGINS)
+        ','.join(CORS_ALLOWED_ORIGINS + [
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'http://localhost:8000',
+            'http://127.0.0.1:8000',
+            'http://testserver',
+            'https://testserver',
+            'ws://localhost:3000',
+            'ws://127.0.0.1:3000',
+            'ws://localhost:8000',
+            'ws://127.0.0.1:8000',
+            'ws://testserver',
+            'wss://testserver',
+        ])
     ).split(',')
     if origin.strip()
 ]
@@ -425,17 +441,24 @@ CACHES = {
     }
 }
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [(_REDIS_HOST, int(_REDIS_PORT))],
+if 'test' in sys.argv or not os.getenv('REDIS_HOST', '').strip():
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                "hosts": [(_REDIS_HOST, int(_REDIS_PORT))],
+            },
+        },
+    }
 
 
-# Email Configs (MailHog for development)
+# Email Configs
 EMAIL_BACKEND       = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST          = os.getenv('EMAIL_HOST', 'localhost')
 EMAIL_PORT          = int(os.getenv('EMAIL_PORT', 587))

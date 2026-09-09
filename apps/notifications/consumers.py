@@ -21,12 +21,6 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'type': 'connection_established',
                 'message': 'Connected to notification service',
             }))
-            # Send unread count on connect
-            count = await self.get_unread_count()
-            await self.send(text_data=json.dumps({
-                'type': 'unread_count',
-                'count': count,
-            }))
         else:
             await self.close(code=4001)
 
