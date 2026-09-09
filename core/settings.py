@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.recipes',
     'apps.sales',
     'apps.pos_lightspeed',
+    'apps.analytics',
     'apps.api',
     'apps.notifications',
 ]
