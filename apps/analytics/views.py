@@ -1,4 +1,6 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,6 +10,35 @@ from apps.locations.models import Location
 from .services import DashboardAnalyticsService
 
 
+@extend_schema(
+    tags=['analytics'],
+    summary='Get dashboard analytics',
+    description='Return summary and dish-performance metrics for a specific location and date range.',
+    parameters=[
+        OpenApiParameter(
+            name='location_id',
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description='Location UUID to analyze.',
+        ),
+        OpenApiParameter(
+            name='start_date',
+            type=OpenApiTypes.DATE,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description='Start date for the analytics period.',
+        ),
+        OpenApiParameter(
+            name='end_date',
+            type=OpenApiTypes.DATE,
+            location=OpenApiParameter.QUERY,
+            required=True,
+            description='End date for the analytics period.',
+        ),
+    ],
+    responses={200: dict, 400: dict},
+)
 class DashboardAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 

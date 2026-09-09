@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
         summary="Delete all read notifications"
     ),
 )
-@method_decorator(ratelimit(key='user', rate='200/h', method='GET', block=False), name='dispatch')
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
