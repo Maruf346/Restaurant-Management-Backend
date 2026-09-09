@@ -18,6 +18,7 @@ urlpatterns = [
     path('inventory/', include('apps.inventory.urls')),
     path('recipes/', include('apps.recipes.urls')),
     path('sales/', include('apps.sales.urls')),
+    path('pos-lightspeed/', include('apps.pos_lightspeed.urls')),
     path('analytics/', include('apps.analytics.urls')),
     path('notifications/', include('apps.notifications.urls')),
 
