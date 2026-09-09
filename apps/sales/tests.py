@@ -1,11 +1,15 @@
 from decimal import Decimal
 
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
 
 from apps.inventory.models import Ingredient
 from apps.locations.models import Location
 from apps.recipes.models import Category, Product, RecipeItem
 from apps.sales.models import DailySalesRecord, SoldDishRecord
+from apps.users.models import User
 
 
 class SalesAnalyticsTests(TestCase):
@@ -78,3 +82,57 @@ class SalesAnalyticsTests(TestCase):
         self.assertEqual(sync_result['total_cost'], Decimal('4.80'))
         self.assertEqual(sync_result['gross_profit'], Decimal('43.20'))
         self.assertEqual(sync_result['food_cost_pct'], Decimal('10.00'))
+
+
+class SalesApiTests(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='sales-api@example.com',
+            username='sales-api',
+            password='StrongPass123',
+            full_name='Sales API User',
+            is_staff=True,
+        )
+        self.location = Location.objects.create(name='Sales Hub', code='SH1', currency='USD')
+        self.category = Category.objects.create(location=self.location, name='Lunch')
+        self.ingredient = Ingredient.objects.create(
+            location=self.location,
+            name='Beef',
+            base_unit='kg',
+            current_stock=Decimal('10.000'),
+            cost_per_base_unit=Decimal('5.00'),
+            latest_purchase_price=Decimal('5.00'),
+            min_stock_alert=Decimal('1.000'),
+        )
+        self.product = Product.objects.create(
+            location=self.location,
+            category=self.category,
+            name='Beef Burger',
+            selling_price=Decimal('18.00'),
+        )
+        RecipeItem.objects.create(
+            product=self.product,
+            ingredient=self.ingredient,
+            quantity=Decimal('0.250'),
+            unit='kg',
+        )
+
+        token_response = self.client.post(
+            reverse('token_obtain_pair'),
+            {'email': 'sales-api@example.com', 'password': 'StrongPass123'},
+            format='json',
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_response.data['access']}")
+
+    def test_daily_sales_list_endpoint_requires_auth_and_returns_records(self):
+        DailySalesRecord.objects.create(
+            location=self.location,
+            date='2026-09-09',
+            total_revenue=Decimal('18.00'),
+            total_cost=Decimal('1.25'),
+        )
+
+        response = self.client.get(reverse('daily-sales-list'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
