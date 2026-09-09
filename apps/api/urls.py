@@ -10,19 +10,18 @@ from rest_framework_simplejwt.views import (
 
 
 urlpatterns = [
-    # path('user/', include('apps.user.urls')),
-
-    #JWT endpoints
-    # path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    path('users/', include('apps.users.urls')),
+    path('locations/', include('apps.locations.urls')),
     path('analytics/', include('apps.analytics.urls')),
     path('notifications/', include('apps.notifications.urls')),
 
     # API schema and documentation
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path('redoc/', SpectacularRedocView.as_view(url_name='redoc'), name='redoc'),
 ]
 
 if settings.DEBUG:
