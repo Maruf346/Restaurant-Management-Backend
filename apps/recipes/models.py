@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.db import models
 
@@ -37,6 +38,22 @@ class Product(models.Model):
         unique_together = ('location', 'name')
         ordering = ['name']
 
+    def recipe_cost(self):
+        return sum((item.ingredient_cost() for item in self.recipe_items.all()), Decimal('0'))
+
+    def gross_profit(self):
+        return self.selling_price - self.recipe_cost()
+
+    def food_cost_percentage(self):
+        if self.selling_price <= 0:
+            return Decimal('0')
+        return (self.recipe_cost() / self.selling_price) * Decimal('100')
+
+    def margin_percentage(self):
+        if self.selling_price <= 0:
+            return Decimal('0')
+        return (self.gross_profit() / self.selling_price) * Decimal('100')
+
     def __str__(self):
         return f'{self.name} ({self.location.name})'
 
@@ -51,6 +68,9 @@ class RecipeItem(models.Model):
 
     class Meta:
         ordering = ['ingredient__name']
+
+    def ingredient_cost(self):
+        return self.ingredient.cost_for_quantity(self.quantity, self.unit)
 
     def __str__(self):
         return f'{self.product.name} - {self.ingredient.name}'
