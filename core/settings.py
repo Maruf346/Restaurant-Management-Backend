@@ -43,6 +43,11 @@ INSTALLED_APPS = [
     
     # Local apps
     'apps.users',
+    'apps.locations',
+    'apps.inventory',
+    'apps.recipes',
+    'apps.sales',
+    'apps.pos_lightspeed',
     'apps.api',
     'apps.notifications',
 ]
