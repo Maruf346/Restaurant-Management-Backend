@@ -441,7 +441,9 @@ CACHES = {
     }
 }
 
-if 'test' in sys.argv or not os.getenv('REDIS_HOST', '').strip():
+USE_REDIS_CHANNELS = os.getenv('USE_REDIS_CHANNELS', 'False').lower() == 'true'
+
+if 'test' in sys.argv or not USE_REDIS_CHANNELS:
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels.layers.InMemoryChannelLayer',

@@ -65,12 +65,6 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'priority': event.get('priority', 'normal'),
             'created_at': event.get('created_at'),
         }))
-        # Also send updated unread count after new notification
-        count = await self.get_unread_count()
-        await self.send(text_data=json.dumps({
-            'type': 'unread_count',
-            'count': count,
-        }))
 
     # ==================== HELPERS ====================
 

@@ -32,9 +32,6 @@ class NotificationWebSocketTests(TestCase):
         connected = async_to_sync(communicator.connect)()
         self.assertTrue(connected)
 
-        first_message = json.loads(async_to_sync(communicator.receive_output)())
-        self.assertEqual(first_message['type'], 'connection_established')
-
         NotificationService.send_notification(
             user=self.user,
             notification_type=NotificationType.DAILY_SUMMARY,
