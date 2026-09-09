@@ -98,7 +98,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_notification_read(self, notification_id):
-        from notifications.models import Notification
+        from apps.notifications.models import Notification
         from django.utils import timezone
         try:
             n = Notification.objects.get(id=notification_id, user=self.user)
@@ -111,7 +111,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_all_read(self):
-        from notifications.models import Notification
+        from apps.notifications.models import Notification
         from django.utils import timezone
         Notification.objects.filter(
             user=self.user, is_read=False
@@ -119,5 +119,5 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_unread_count(self):
-        from notifications.models import Notification
+        from apps.notifications.models import Notification
         return Notification.objects.filter(user=self.user, is_read=False).count()

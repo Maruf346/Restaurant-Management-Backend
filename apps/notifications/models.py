@@ -11,32 +11,18 @@ class NotificationType(models.TextChoices):
     PASSWORD_UPDATED = 'pass_updated', 'Password Updated'
     PASSWORD_CHANGED = 'pass_changed', 'Password Changed'
 
-    # Jobs
-    JOB_ASSIGNED = 'job_assigned', 'Job Assigned'
-    JOB_UPDATED = 'job_updated', 'Job Updated'
-    JOB_STARTED = 'job_started', 'Job Started'
-    JOB_COMPLETED = 'job_completed', 'Job Completed'
-    JOB_OVERDUE = 'job_overdue', 'Job Overdue'
-    JOB_REOPENED = 'job_reopened', 'Job Reopened'
-    JOB_RESCHEDULED = 'job_rescheduled', 'Job Rescheduled'
-    NOTE_ASSIGNED = 'note_assigned', 'Note Assigned'
+    # Restaurant operations
+    DAILY_SUMMARY = 'daily_summary', 'Daily Summary'
+    LIGHTSPEED_SYNC_COMPLETED = 'lightspeed_sync_completed', 'Lightspeed Sync Completed'
+    SALES_IMPORT_COMPLETED = 'sales_import_completed', 'Sales Import Completed'
+    LOW_STOCK_ALERT = 'low_stock_alert', 'Low Stock Alert'
+    PROFITABILITY_ALERT = 'profitability_alert', 'Profitability Alert'
+    RECIPE_UPDATED = 'recipe_updated', 'Recipe Updated'
+    PURCHASE_LOGGED = 'purchase_logged', 'Purchase Logged'
+    MENU_ITEM_UPDATED = 'menu_item_updated', 'Menu Item Updated'
+    SYSTEM_ALERT = 'system_alert', 'System Alert'
 
-    # Reports                          ← ADD THIS BLOCK
-    REPORT_SUBMITTED = 'report_submitted', 'Report Submitted'
-
-    # Safety forms
-    SAFETY_FORM_SUBMITTED = 'safety_form_submitted', 'Safety Form Submitted'
-
-    # Fleet
-    VEHICLE_ISSUE_REPORTED = 'vehicle_issue_reported', 'Vehicle Issue Reported'
-    VEHICLE_INSPECTION_DUE = 'vehicle_inspection_due', 'Vehicle Inspection Due'
-    VEHICLE_SERVICE_OVERDUE = 'vehicle_service_overdue', 'Vehicle Service Overdue'
-
-    # Support
-    SUPPORT_REQUEST = 'support_request', 'Support Request'
-    ISSUE_REPORT = 'issue_report', 'Issue Report'
-
-    # Admin
+    # Admin / general
     NEW_USER = 'new_user', 'New User Joined'
 
 

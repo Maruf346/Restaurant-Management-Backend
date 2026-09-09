@@ -29,16 +29,12 @@ def debug_task(self):
 
 
 app.conf.beat_schedule = {
-    'mark-overdue-jobs': {
-        'task': 'jobs.tasks.mark_overdue_jobs',
-        'schedule': crontab(minute=0, hour='*/6'),
-    },
-    'notify-overdue-jobs': {
-        'task': 'notifications.tasks.notify_overdue_jobs',
-        'schedule': crontab(minute=0, hour='*/6'),
-    },
-    'notify-vehicle-service-overdue': {
-        'task': 'notifications.tasks.notify_vehicle_service_overdue',
+    'daily-dashboard-summary': {
+        'task': 'apps.notifications.tasks.notify_daily_dashboard_summary',
         'schedule': crontab(hour=8, minute=0),
+    },
+    'low-stock-alerts': {
+        'task': 'apps.notifications.tasks.notify_low_stock_alerts',
+        'schedule': crontab(hour=9, minute=0),
     },
 }

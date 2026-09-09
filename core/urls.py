@@ -10,8 +10,8 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check, name='health-check'),
-    path('api/', include('api.urls')),
-    
+    path('api/', include('apps.api.urls')),
+
     # CKEditor 5 upload
     path('ckeditor5/', include('django_ckeditor_5.urls')),
 ]

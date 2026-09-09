@@ -1,46 +1,61 @@
-from celery import shared_task
-from django.utils import timezone
-from django.contrib.auth import get_user_model
 import logging
+
+from celery import shared_task
+from django.contrib.auth import get_user_model
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
 @shared_task
-def notify_overdue_jobs():
-    """
-    Runs alongside mark_overdue_jobs beat task.
-    Sends notifications for newly overdue jobs.
-    """
-    from jobs.models import Job, JobStatus
-    from notifications.services import NotificationTemplates
+def notify_daily_dashboard_summary():
+    """Send a daily dashboard summary to admin and manager users."""
+    from apps.notifications.services import NotificationTemplates
 
-    overdue_jobs = Job.objects.filter(
-        status=JobStatus.OVERDUE
-    ).select_related('assigned_to', 'client')
+    staff_users = User.objects.filter(is_active=True, is_staff=True)
+    for user in staff_users:
+        NotificationTemplates.daily_summary(user)
 
-    for job in overdue_jobs:
-        NotificationTemplates.job_overdue(job)
-
-    logger.info(f'Sent overdue notifications for {overdue_jobs.count()} jobs')
+    logger.info(f'Sent daily dashboard summary notifications to {staff_users.count()} users')
 
 
 @shared_task
-def notify_vehicle_service_overdue():
-    """
-    Notify managers about vehicles that are overdue for service.
-    Add to Celery beat — run daily.
-    """
-    from fleets.models import Vehicle, VehicleStatus
-    from notifications.services import NotificationTemplates
+def notify_low_stock_alerts():
+    """Send inventory alerts for ingredients that are below their stock threshold."""
+    from apps.notifications.services import NotificationTemplates
 
-    overdue_vehicles = Vehicle.objects.filter(
-        status=VehicleStatus.SERVICE_OVERDUE,
-        is_active=True
-    )
+    try:
+        from django.db.models import F
+        from apps.inventory.models import Ingredient
+    except ImportError:
+        logger.warning('Inventory app not available yet; skipping low stock alert task.')
+        return
 
-    for vehicle in overdue_vehicles:
-        NotificationTemplates.vehicle_service_overdue(vehicle)
+    low_stock_items = Ingredient.objects.filter(current_stock__lte=F('min_stock_alert'))
+    for ingredient in low_stock_items:
+        for user in User.objects.filter(is_active=True, is_staff=True):
+            NotificationTemplates.low_stock_alert(user, ingredient)
 
-    logger.info(f'Sent service overdue notifications for {overdue_vehicles.count()} vehicles')
+    logger.info(f'Sent low stock notifications for {low_stock_items.count()} ingredients')
+
+
+@shared_task
+def notify_lightspeed_sync_completed(location_name='Restaurant', records_synced=0):
+    """Send a success notification after a Lightspeed sales sync completes."""
+    from apps.notifications.services import NotificationTemplates
+
+    for user in User.objects.filter(is_active=True, is_staff=True):
+        NotificationTemplates.lightspeed_sync_completed(user, location_name, records_synced)
+
+    logger.info('Lightspeed sync success notification sent')
+
+
+@shared_task
+def notify_profitability_alert(location_name='Restaurant', food_cost_pct=None):
+    """Send a dashboard notification if food cost ratio is too high."""
+    from apps.notifications.services import NotificationTemplates
+
+    for user in User.objects.filter(is_active=True, is_staff=True):
+        NotificationTemplates.profitability_alert(user, location_name, food_cost_pct)
+
+    logger.info('Profitability alert notification sent')
