@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.db import models
 
@@ -22,6 +23,22 @@ class DailySalesRecord(models.Model):
         unique_together = ('location', 'date')
         ordering = ['-date']
 
+    def calculate_totals(self):
+        sold_dishes = self.sold_dishes.all()
+        self.total_revenue = sum((item.total_sales for item in sold_dishes), Decimal('0'))
+        self.total_cost = sum((item.theoretical_cost for item in sold_dishes), Decimal('0'))
+        self.gross_profit = self.total_revenue - self.total_cost
+
+        if self.total_revenue > 0:
+            self.food_cost_pct = (self.total_cost / self.total_revenue) * Decimal('100')
+            self.profit_margin_pct = (self.gross_profit / self.total_revenue) * Decimal('100')
+        else:
+            self.food_cost_pct = Decimal('0')
+            self.profit_margin_pct = Decimal('0')
+
+        self.save(update_fields=['total_revenue', 'total_cost', 'gross_profit', 'food_cost_pct', 'profit_margin_pct', 'updated_at'])
+        return self
+
     def __str__(self):
         return f'{self.location.name} - {self.date}'
 
@@ -40,6 +57,21 @@ class SoldDishRecord(models.Model):
 
     class Meta:
         ordering = ['-total_sales']
+
+    def calculate_metrics(self):
+        recipe_cost = self.product.recipe_cost() if self.product else Decimal('0')
+        self.theoretical_cost = recipe_cost * Decimal(self.quantity_sold)
+        self.total_sales = self.unit_selling_price * Decimal(self.quantity_sold)
+        self.gross_profit = self.total_sales - self.theoretical_cost
+
+        if self.total_sales > 0:
+            self.margin_pct = (self.gross_profit / self.total_sales) * Decimal('100')
+        else:
+            self.margin_pct = Decimal('0')
+
+        self.save(update_fields=['total_sales', 'theoretical_cost', 'gross_profit', 'margin_pct'])
+        self.daily_sales.calculate_totals()
+        return self
 
     def __str__(self):
         return f'{self.product.name} - {self.quantity_sold} sold'
