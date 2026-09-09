@@ -81,7 +81,9 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             jwt_auth = JWTAuthentication()
             validated_token = jwt_auth.get_validated_token(token)
             return jwt_auth.get_user(validated_token)
-        except (AuthenticationFailed, InvalidToken, TokenError):
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("WS auth failed: %s", exc)
             return AnonymousUser()
 
     @database_sync_to_async

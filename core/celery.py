@@ -37,4 +37,12 @@ app.conf.beat_schedule = {
         'task': 'apps.notifications.tasks.notify_low_stock_alerts',
         'schedule': crontab(hour=9, minute=0),
     },
+    'refresh-lightspeed-tokens': {
+        'task': 'pos_lightspeed.refresh_near_expiry_tokens',
+        'schedule': crontab(minute='*/5'),
+    },
+    'daily-lightspeed-reconciliation': {
+        'task': 'pos_lightspeed.reconcile_lightspeed_sales',
+        'schedule': crontab(hour=2, minute=0),
+    },
 }

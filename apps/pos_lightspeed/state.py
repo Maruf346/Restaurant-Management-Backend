@@ -1,0 +1,66 @@
+"""
+apps/pos_lightspeed/state.py
+────────────────────────────
+Cryptographically secure OAuth state manager using Redis / Django Cache.
+
+State prevents CSRF attacks during the OAuth 2.0 authorization code flow.
+The state token binds the authorization request to the specific user and
+location that initiated it.
+"""
+
+import json
+import secrets
+from typing import Optional
+
+from django.core.cache import cache
+
+
+class OAuthStateManager:
+    """
+    Manages generation, storage, and one-time consumption of OAuth state tokens.
+    """
+    PREFIX = 'lightspeed_oauth_state:'
+    TTL_SECONDS = 600  # 10 minutes
+
+    @classmethod
+    def _make_key(cls, state: str) -> str:
+        return f"{cls.PREFIX}{state}"
+
+    @classmethod
+    def create_state(cls, user_id, location_id) -> str:
+        """
+        Generate a cryptographically secure state token, associate it with
+        the user_id and location_id, and store it in Redis with an expiry.
+        """
+        state = secrets.token_urlsafe(32)
+        payload = {
+            'user_id': str(user_id),
+            'location_id': str(location_id),
+        }
+        cache.set(cls._make_key(state), json.dumps(payload), timeout=cls.TTL_SECONDS)
+        return state
+
+    @classmethod
+    def validate_and_consume_state(cls, state: str) -> Optional[dict]:
+        """
+        Validate that the state exists in cache, consume it (delete it to prevent
+        replay attacks), and return the stored payload {user_id, location_id}.
+        Returns None if the state is invalid or expired.
+        """
+        if not state:
+            return None
+
+        key = cls._make_key(state)
+        raw_val = cache.get(key)
+        if not raw_val:
+            return None
+
+        # Delete immediately to ensure one-time usage
+        cache.delete(key)
+
+        try:
+            if isinstance(raw_val, bytes):
+                raw_val = raw_val.decode('utf-8')
+            return json.loads(raw_val)
+        except (ValueError, TypeError):
+            return None

@@ -18,8 +18,11 @@ class IngredientApiTests(APITestCase):
             is_staff=True,
         )
         self.location = Location.objects.create(name='Downtown', code='DT5', currency='USD')
+        from apps.locations.models import UserLocation
+        UserLocation.objects.create(user=self.user, location=self.location)
+
         token_response = self.client.post(
-            reverse('token_obtain_pair'),
+            reverse('auth:login'),
             {'email': 'inventory@example.com', 'password': 'StrongPass123'},
             format='json',
         )

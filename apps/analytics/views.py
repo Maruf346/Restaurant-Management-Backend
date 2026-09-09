@@ -1,3 +1,9 @@
+"""
+apps/analytics/views.py
+────────────────────────
+Analytics views with location-level access enforcement.
+"""
+
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -7,13 +13,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.locations.models import Location
+from apps.locations.mixins import LocationAccessMixin
 from .services import DashboardAnalyticsService
 
 
 @extend_schema(
     tags=['analytics'],
     summary='Get dashboard analytics',
-    description='Return summary and dish-performance metrics for a specific location and date range.',
+    description=(
+        'Return summary and dish-performance metrics for a specific location and date range. '
+        'Restaurant Admins can only access analytics for their assigned location.'
+    ),
     parameters=[
         OpenApiParameter(
             name='location_id',
@@ -37,9 +47,9 @@ from .services import DashboardAnalyticsService
             description='End date for the analytics period.',
         ),
     ],
-    responses={200: dict, 400: dict},
+    responses={200: dict, 400: dict, 403: dict},
 )
-class DashboardAnalyticsView(APIView):
+class DashboardAnalyticsView(LocationAccessMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -51,6 +61,15 @@ class DashboardAnalyticsView(APIView):
             return Response({'detail': 'location_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
         if not start_date or not end_date:
             return Response({'detail': 'start_date and end_date are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Enforce location-level access
+        try:
+            self.assert_location_access(location_id)
+        except Exception:
+            return Response(
+                {'detail': 'You do not have permission to access this location.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         location = get_object_or_404(Location, id=location_id)
 

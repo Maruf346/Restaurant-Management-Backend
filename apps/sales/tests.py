@@ -95,6 +95,9 @@ class SalesApiTests(APITestCase):
             is_staff=True,
         )
         self.location = Location.objects.create(name='Sales Hub', code='SH1', currency='USD')
+        from apps.locations.models import UserLocation
+        UserLocation.objects.create(user=self.user, location=self.location)
+
         self.category = Category.objects.create(location=self.location, name='Lunch')
         self.ingredient = Ingredient.objects.create(
             location=self.location,
@@ -119,7 +122,7 @@ class SalesApiTests(APITestCase):
         )
 
         token_response = self.client.post(
-            reverse('token_obtain_pair'),
+            reverse('auth:login'),
             {'email': 'sales-api@example.com', 'password': 'StrongPass123'},
             format='json',
         )

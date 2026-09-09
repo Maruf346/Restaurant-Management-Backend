@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     
     # Third-party apps
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'drf_spectacular',
     'django_filters',
@@ -338,19 +339,17 @@ REST_FRAMEWORK = {
 
 # drf-spectacular settings
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Restaurant Management API',
-    'DESCRIPTION': "API for Restaurant Management",
-    'VERSION': '1.0.1',
+    'TITLE': 'ProfitPlate API',
+    'DESCRIPTION': 'API for ProfitPlate — Restaurant cost management and Lightspeed POS integration.',
+    'VERSION': '1.1.0',
     'TERMS_OF_SERVICE': 'https://www.google.com/policies/terms/',
     'CONTACT': {'email': 'maruf.bshs@gmail.com'},
     'LICENSE': {'name': 'BSD License'},
     'SERVE_INCLUDE_SCHEMA': False,
-    
+
     # Postman friendly settings
     'COMPONENT_SPLIT_REQUEST': True,
-    #'POSTMAN_ENABLED': True,
     'SORT_OPERATIONS': False,
-    
 }
 
 
@@ -411,6 +410,21 @@ SIMPLE_JWT = {
 }
 
 
+# ── Lightspeed K-Series OAuth settings ───────────────────────────────────────
+# These are ProfitPlate's registered Lightspeed application credentials.
+# They are NOT per-restaurant; they belong to the ProfitPlate application.
+LIGHTSPEED_CLIENT_ID = os.getenv('LIGHTSPEED_CLIENT_ID', '')
+LIGHTSPEED_CLIENT_SECRET = os.getenv('LIGHTSPEED_CLIENT_SECRET', '')
+LIGHTSPEED_REDIRECT_URI = os.getenv(
+    'LIGHTSPEED_REDIRECT_URI',
+    'http://127.0.0.1:8000/api/pos-lightspeed/callback/',
+)
+# Number of seconds before token expiry to proactively refresh (default: 5 min)
+LIGHTSPEED_TOKEN_REFRESH_BUFFER_SECONDS = int(
+    os.getenv('LIGHTSPEED_TOKEN_REFRESH_BUFFER_SECONDS', '300')
+)
+
+
 # Celery Configs
 CELERY_BROKER_URL = 'redis://{host}:{port}/0'.format(
     host=os.environ.get('REDIS_HOST') or 'localhost',
@@ -429,17 +443,25 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 _REDIS_HOST = os.environ.get('REDIS_HOST') or 'localhost'
 _REDIS_PORT = os.environ.get('REDIS_PORT') or '6379'
 
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f'redis://{_REDIS_HOST}:{_REDIS_PORT}/1',
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-        'KEY_PREFIX': 'autointel',
-        'TIMEOUT': 300,
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test-cache',
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': f'redis://{_REDIS_HOST}:{_REDIS_PORT}/1',
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'profitplate',
+            'TIMEOUT': 300,
+        }
+    }
 
 USE_REDIS_CHANNELS = os.getenv('USE_REDIS_CHANNELS', 'False').lower() == 'true'
 

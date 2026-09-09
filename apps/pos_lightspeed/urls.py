@@ -1,8 +1,14 @@
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from .views import LightspeedConfigViewSet
+from .views import *
 
-router = DefaultRouter()
-router.register(r'', LightspeedConfigViewSet, basename='lightspeed-config')
+app_name = 'pos_lightspeed'
 
-urlpatterns = router.urls
+urlpatterns = [
+    path('status/', LightspeedStatusView.as_view(), name='status'),
+    path('authorize/', LightspeedAuthorizeView.as_view(), name='authorize'),
+    path('callback/', LightspeedCallbackView.as_view(), name='callback'),
+    path('disconnect/', LightspeedDisconnectView.as_view(), name='disconnect'),
+    path('sync/', LightspeedManualSyncView.as_view(), name='sync'),
+    path('webhook/', LightspeedWebhookView.as_view(), name='webhook'),
+]

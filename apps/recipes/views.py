@@ -1,7 +1,14 @@
+"""
+apps/recipes/views.py
+──────────────────────
+Recipe viewsets with location-level access control.
+"""
+
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from apps.locations.mixins import LocationAccessMixin
 from .models import Category, Product, RecipeItem
 from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerializer
 
@@ -10,19 +17,17 @@ from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerial
     list=extend_schema(
         tags=['recipes'],
         summary='List categories',
-        description='Return menu categories for one or more restaurant locations.',
+        description='Return menu categories for the accessible location(s).',
         responses={200: CategorySerializer(many=True)},
     ),
     retrieve=extend_schema(
         tags=['recipes'],
         summary='Get category',
-        description='Return the details for a single menu category.',
         responses={200: CategorySerializer},
     ),
     create=extend_schema(
         tags=['recipes'],
         summary='Create category',
-        description='Create a new category to organize menu items.',
         request=CategorySerializer,
         responses={201: CategorySerializer},
     ),
@@ -44,10 +49,24 @@ from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerial
         responses={204: None},
     ),
 )
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(LocationAccessMixin, viewsets.ModelViewSet):
     queryset = Category.objects.select_related('location').all()
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        queryset = self.filter_queryset_by_location(queryset)
+        location_id = self.request.query_params.get('location')
+        if location_id:
+            queryset = queryset.filter(location_id=location_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        location = serializer.validated_data.get('location')
+        if location:
+            self.assert_location_access(location.id)
+        serializer.save()
 
 
 @extend_schema_view(
@@ -65,7 +84,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
     create=extend_schema(
         tags=['recipes'],
         summary='Create recipe item',
-        description='Add an ingredient requirement to a product recipe.',
         request=RecipeItemSerializer,
         responses={201: RecipeItemSerializer},
     ),
@@ -87,29 +105,33 @@ class CategoryViewSet(viewsets.ModelViewSet):
         responses={204: None},
     ),
 )
-class RecipeItemViewSet(viewsets.ModelViewSet):
-    queryset = RecipeItem.objects.select_related('product', 'ingredient').all()
+class RecipeItemViewSet(LocationAccessMixin, viewsets.ModelViewSet):
+    queryset = RecipeItem.objects.select_related('product__location', 'ingredient').all()
     serializer_class = RecipeItemSerializer
+    # Filter via product → location
+    location_filter_field = 'product__location_id'
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return self.filter_queryset_by_location(queryset)
 
 
 @extend_schema_view(
     list=extend_schema(
         tags=['recipes'],
         summary='List products',
-        description='Return menu products and their recipe cost information.',
+        description='Return menu products for the accessible location(s).',
         responses={200: ProductSerializer(many=True)},
     ),
     retrieve=extend_schema(
         tags=['recipes'],
         summary='Get product details',
-        description='Return a single product and recipe-cost summary.',
         responses={200: ProductSerializer},
     ),
     create=extend_schema(
         tags=['recipes'],
         summary='Create product',
-        description='Create a menu product with recipe and pricing details.',
         request=ProductSerializer,
         responses={201: ProductSerializer},
     ),
@@ -131,14 +153,21 @@ class RecipeItemViewSet(viewsets.ModelViewSet):
         responses={204: None},
     ),
 )
-class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.select_related('location', 'category').all()
+class ProductViewSet(LocationAccessMixin, viewsets.ModelViewSet):
+    queryset = Product.objects.select_related('location', 'category').prefetch_related('recipe_items').all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        queryset = self.filter_queryset_by_location(queryset)
         location_id = self.request.query_params.get('location')
         if location_id:
             queryset = queryset.filter(location_id=location_id)
         return queryset
+
+    def perform_create(self, serializer):
+        location = serializer.validated_data.get('location')
+        if location:
+            self.assert_location_access(location.id)
+        serializer.save()

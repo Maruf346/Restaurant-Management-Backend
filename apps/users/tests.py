@@ -1,71 +1,132 @@
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.locations.models import Location
-from apps.users.models import User
+from apps.locations.models import Location, UserLocation
+from apps.users.models import User, UserRole
 
 
-class UserAuthApiTests(APITestCase):
+class UserAuthTests(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            email='admin@example.com',
-            username='admin',
-            password='StrongPass123',
-            full_name='Admin User',
-            is_staff=True,
+        self.super_admin = User.objects.create_superuser(
+            email='super@profitplate.com',
+            username='superadmin',
+            password='SuperPassword123!',
+            full_name='Super Administrator',
+            role=UserRole.SUPER_ADMIN,
+        )
+        self.restaurant_admin = User.objects.create_user(
+            email='admin@bistro.com',
+            username='bistroadmin',
+            password='TempPassword123!',
+            full_name='Bistro Admin',
+            role=UserRole.RESTAURANT_ADMIN,
+            password_change_required=True,
         )
 
-    def test_register_user_creates_account(self):
+    def test_super_admin_login_success(self):
         response = self.client.post(
-            reverse('register-user'),
+            reverse('auth:login'),
+            {'email': 'super@profitplate.com', 'password': 'SuperPassword123!'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+        self.assertEqual(response.data['user']['role'], UserRole.SUPER_ADMIN)
+        self.assertFalse(response.data['password_change_required'])
+
+    def test_restaurant_admin_login_requires_password_change(self):
+        response = self.client.post(
+            reverse('auth:login'),
+            {'email': 'admin@bistro.com', 'password': 'TempPassword123!'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['role'], UserRole.RESTAURANT_ADMIN)
+        self.assertTrue(response.data['password_change_required'])
+
+    def test_login_invalid_credentials_returns_401(self):
+        response = self.client.post(
+            reverse('auth:login'),
+            {'email': 'super@profitplate.com', 'password': 'WrongPassword'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_login_inactive_user_returns_401(self):
+        self.restaurant_admin.is_active = False
+        self.restaurant_admin.save()
+
+        response = self.client.post(
+            reverse('auth:login'),
+            {'email': 'admin@bistro.com', 'password': 'TempPassword123!'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_token_refresh(self):
+        refresh = RefreshToken.for_user(self.super_admin)
+        response = self.client.post(
+            reverse('auth:refresh'),
+            {'refresh': str(refresh)},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+    def test_logout_blacklists_token(self):
+        refresh = RefreshToken.for_user(self.super_admin)
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.post(
+            reverse('auth:logout'),
+            {'refresh': str(refresh)},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Trying to refresh with blacklisted token should fail
+        refresh_response = self.client.post(
+            reverse('auth:refresh'),
+            {'refresh': str(refresh)},
+            format='json',
+        )
+        self.assertEqual(refresh_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_change_password_clears_flag(self):
+        self.client.force_authenticate(user=self.restaurant_admin)
+        response = self.client.post(
+            reverse('users:change-password'),
             {
-                'email': 'new.user@example.com',
-                'username': 'newuser',
-                'password': 'StrongPass123',
-                'full_name': 'New User',
+                'current_password': 'TempPassword123!',
+                'new_password': 'BrandNewSecurePassword456!',
             },
             format='json',
         )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(User.objects.filter(email='new.user@example.com').exists())
+        self.restaurant_admin.refresh_from_db()
+        self.assertFalse(self.restaurant_admin.password_change_required)
+        self.assertTrue(self.restaurant_admin.check_password('BrandNewSecurePassword456!'))
 
-    def test_me_endpoint_returns_authenticated_user(self):
-        token_response = self.client.post(
-            reverse('token_obtain_pair'),
-            {'email': 'admin@example.com', 'password': 'StrongPass123'},
+    def test_change_password_invalid_current_password(self):
+        self.client.force_authenticate(user=self.restaurant_admin)
+        response = self.client.post(
+            reverse('users:change-password'),
+            {
+                'current_password': 'IncorrectPassword!',
+                'new_password': 'BrandNewSecurePassword456!',
+            },
             format='json',
         )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_response.data['access']}")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-        response = self.client.get(reverse('current-user'))
-
+    def test_me_endpoint_returns_user_profile(self):
+        self.client.force_authenticate(user=self.super_admin)
+        response = self.client.get(reverse('users:current-user'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['email'], 'admin@example.com')
-
-
-class LocationApiTests(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(
-            email='manager@example.com',
-            username='manager',
-            password='StrongPass123',
-            full_name='Manager User',
-            is_staff=True,
-        )
-        self.location = Location.objects.create(name='Downtown', code='DT4', currency='USD')
-        token_response = self.client.post(
-            reverse('token_obtain_pair'),
-            {'email': 'manager@example.com', 'password': 'StrongPass123'},
-            format='json',
-        )
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_response.data['access']}")
-
-    def test_locations_listing_returns_data(self):
-        response = self.client.get(reverse('locations-list'))
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['email'], 'super@profitplate.com')
+        self.assertEqual(response.data['role'], UserRole.SUPER_ADMIN)

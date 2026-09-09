@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -21,3 +22,38 @@ class Location(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class UserLocation(models.Model):
+    """
+    Through-model that assigns restaurant users to specific locations.
+
+    Designed for ManyToMany so the system can support multiple admins per
+    restaurant in the future. Currently, RESTAURANT_ADMIN users are restricted
+    to their assigned location(s).
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='user_locations',
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.CASCADE,
+        related_name='user_locations',
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='location_assignments_made',
+    )
+
+    class Meta:
+        unique_together = ('user', 'location')
+        ordering = ['-assigned_at']
+
+    def __str__(self):
+        return f'{self.user.email} → {self.location.name}'

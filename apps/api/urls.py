@@ -1,25 +1,35 @@
-from django.urls import path, include
-from rest_framework import routers
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from django.conf.urls.static import static
 from django.conf import settings
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from django.conf.urls.static import static
+from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 
 urlpatterns = [
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # Auth (login / logout / refresh)
+    path('auth/', include('apps.users.auth_urls')),
 
+    # User profile + management (me, change-password, restaurant-admins)
     path('users/', include('apps.users.urls')),
+
+    # Location management
     path('locations/', include('apps.locations.urls')),
+
+    # Inventory
     path('inventory/', include('apps.inventory.urls')),
+
+    # Recipes / menu
     path('recipes/', include('apps.recipes.urls')),
+
+    # Sales records
     path('sales/', include('apps.sales.urls')),
+
+    # Lightspeed OAuth actions + config management
     path('pos-lightspeed/', include('apps.pos_lightspeed.urls')),
+
+    # Analytics
     path('analytics/', include('apps.analytics.urls')),
+
+    # Notifications
     path('notifications/', include('apps.notifications.urls')),
 
     # API schema and documentation
@@ -31,4 +41,3 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

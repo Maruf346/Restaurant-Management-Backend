@@ -69,7 +69,7 @@ class SoldDishRecord(models.Model):
         else:
             self.margin_pct = Decimal('0')
 
-        self.save(update_fields=['total_sales', 'theoretical_cost', 'gross_profit', 'margin_pct'])
+        self.save(update_fields=['quantity_sold', 'unit_selling_price', 'total_sales', 'theoretical_cost', 'gross_profit', 'margin_pct'])
         self.daily_sales.calculate_totals()
         return self
 
