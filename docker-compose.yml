@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+      daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      USE_REDIS_CHANNELS: "true"
+    depends_on:
+      - redis
+
+  celery_worker:
+    build: .
+    command: celery -A core worker -l info
+    working_dir: /app
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      USE_REDIS_CHANNELS: "true"
+    depends_on:
+      - redis
+
+  celery_beat:
+    build: .
+    command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    working_dir: /app
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      USE_REDIS_CHANNELS: "true"
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
