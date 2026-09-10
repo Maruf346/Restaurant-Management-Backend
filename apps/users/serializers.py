@@ -17,6 +17,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant, UserRestaurant
+from apps.restaurants.serializers import RestaurantSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,42 @@ class UserPublicSerializer(serializers.ModelSerializer):
     """
     Safe read-only representation of a user for API responses.
     Never exposes passwords, is_staff, or is_superuser.
+    Includes profile_picture as an absolute URL.
     """
+    profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'full_name', 'role', 'is_active']
+        fields = ['id', 'email', 'full_name', 'role', 'is_active', 'profile_picture']
         read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_profile_picture(self, obj):
+        if not obj.profile_picture:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return obj.profile_picture.url
+
+
+# ── Profile update ─────────────────────────────────────────────────────────
+
+class UpdateProfileSerializer(serializers.Serializer):
+    """
+    Used by any authenticated user to update their own profile.
+    Supports multipart/form-data for profile picture upload.
+    """
+    full_name = serializers.CharField(max_length=150, required=False)
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
+
+    def update(self, instance, validated_data):
+        if 'full_name' in validated_data:
+            instance.full_name = validated_data['full_name']
+        if 'profile_picture' in validated_data:
+            instance.profile_picture = validated_data['profile_picture']
+        instance.save(update_fields=[k for k in validated_data if k in ('full_name', 'profile_picture')])
+        return instance
 
 
 # ── Authentication serializers ──────────────────────────────────────────────
@@ -79,19 +110,35 @@ class ChangePasswordSerializer(serializers.Serializer):
         min_length=8,
         style={'input_type': 'password'},
     )
+    confirm_new_password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        style={'input_type': 'password'},
+        help_text='Must match new_password exactly.',
+    )
 
     def validate_new_password(self, value):
         from django.contrib.auth.password_validation import validate_password
         validate_password(value)
         return value
 
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_new_password']:
+            raise serializers.ValidationError({
+                'confirm_new_password': 'New password and confirmation do not match.'
+            })
+        return attrs
 
-# ── Super Admin → Restaurant Admin creation ─────────────────────────────────
+
+# ── Super Admin / Restaurant Admin → Restaurant Admin creation ──────────────
 
 class CreateRestaurantAdminSerializer(serializers.Serializer):
     """
-    Used by Super Admin to create a new Restaurant Admin user.
-    The backend automatically sets password_change_required = True.
+    Used by Super Admin or Restaurant Admin to invite a new Restaurant Admin.
+
+    - Super Admin: can assign any valid restaurant.
+    - Restaurant Admin: can only assign restaurants they themselves manage.
+      Attempting to assign another restaurant returns a 400 validation error.
     """
 
     email = serializers.EmailField()
@@ -105,12 +152,7 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
     restaurant_ids = serializers.ListField(
         child=serializers.UUIDField(),
         help_text='List of Restaurant UUIDs to assign this admin to.',
-        required=False,
-    )
-    location_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        help_text='Backward-compatible alias for restaurant_ids.',
-        required=False,
+        required=True,
     )
 
     def validate_email(self, value):
@@ -120,24 +162,39 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        ids = attrs.get('restaurant_ids') or attrs.get('location_ids')
+        ids = attrs.get('restaurant_ids', [])
         if not ids:
             raise serializers.ValidationError({
                 'restaurant_ids': ['This field is required.']
             })
+
+        # Validate UUIDs exist
         existing = set(Restaurant.objects.filter(id__in=ids).values_list('id', flat=True))
         missing = [str(i) for i in ids if i not in existing]
         if missing:
             raise serializers.ValidationError({
                 'restaurant_ids': [f'The following restaurant IDs do not exist: {", ".join(missing)}']
             })
+
+        # Restaurant Admins can only assign restaurants they manage
+        requesting_user = self.context['request'].user
+        if requesting_user.is_restaurant_admin:
+            allowed_ids = set(requesting_user.get_assigned_restaurant_ids())
+            unauthorized = [str(i) for i in ids if i not in allowed_ids]
+            if unauthorized:
+                raise serializers.ValidationError({
+                    'restaurant_ids': [
+                        'You can only assign new admins to restaurants you manage. '
+                        f'Unauthorized restaurant IDs: {", ".join(unauthorized)}'
+                    ]
+                })
+
         attrs['resolved_restaurant_ids'] = ids
         return attrs
 
     def create(self, validated_data):
         restaurant_ids = validated_data.pop('resolved_restaurant_ids')
         validated_data.pop('restaurant_ids', None)
-        validated_data.pop('location_ids', None)
         password = validated_data.pop('password')
         requesting_user = self.context['request'].user
 
@@ -151,36 +208,53 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
             is_active=True,
         )
 
-        # Assign to restaurants
-        restaurants = Restaurant.objects.filter(id__in=restaurant_ids)
+        # Assign to restaurants and collect names for the invitation email
+        restaurants = list(Restaurant.objects.filter(id__in=restaurant_ids))
+        restaurant_names = []
         for rest in restaurants:
             UserRestaurant.objects.create(
                 user=user,
                 restaurant=rest,
                 assigned_by=requesting_user,
             )
+            restaurant_names.append(rest.name)
+
+        # Send invitation email (non-blocking — log failure, never raise)
+        try:
+            from apps.users.email import send_restaurant_admin_invite
+            send_restaurant_admin_invite(user, password, restaurant_names)
+        except Exception as exc:
+            logger.error('Invitation email failed for %s: %s', user.email, exc)
 
         return user
 
 
+# ── Restaurant Admin read serializer ───────────────────────────────────────
+
 class RestaurantAdminSerializer(serializers.ModelSerializer):
-    """Read serializer for listing Restaurant Admin users."""
+    """Read serializer for listing and retrieving Restaurant Admin users."""
     assigned_restaurants = serializers.SerializerMethodField()
-    assigned_locations = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'full_name', 'role', 'is_active',
-                  'password_change_required', 'assigned_restaurants',
-                  'assigned_locations', 'date_joined']
+        fields = [
+            'id', 'email', 'full_name', 'role', 'is_active',
+            'password_change_required', 'profile_picture',
+            'assigned_restaurants', 'date_joined',
+        ]
         read_only_fields = fields
 
-    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    @extend_schema_field(RestaurantSerializer(many=True))
     def get_assigned_restaurants(self, obj):
-        from apps.restaurants.serializers import RestaurantSerializer
         restaurants = Restaurant.objects.filter(user_restaurants__user=obj)
-        return RestaurantSerializer(restaurants, many=True).data
+        return RestaurantSerializer(restaurants, many=True, context=self.context).data
 
-    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
-    def get_assigned_locations(self, obj):
-        return self.get_assigned_restaurants(obj)
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_profile_picture(self, obj):
+        if not obj.profile_picture:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return obj.profile_picture.url

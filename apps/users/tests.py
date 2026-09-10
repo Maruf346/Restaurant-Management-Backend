@@ -37,6 +37,8 @@ class UserAuthTests(APITestCase):
         self.assertIn('refresh', response.data)
         self.assertEqual(response.data['user']['role'], UserRole.SUPER_ADMIN)
         self.assertFalse(response.data['password_change_required'])
+        # Profile picture field should be present in login response
+        self.assertIn('profile_picture', response.data['user'])
 
     def test_restaurant_admin_login_requires_password_change(self):
         response = self.client.post(
@@ -103,6 +105,7 @@ class UserAuthTests(APITestCase):
             {
                 'current_password': 'TempPassword123!',
                 'new_password': 'BrandNewSecurePassword456!',
+                'confirm_new_password': 'BrandNewSecurePassword456!',
             },
             format='json',
         )
@@ -119,10 +122,26 @@ class UserAuthTests(APITestCase):
             {
                 'current_password': 'IncorrectPassword!',
                 'new_password': 'BrandNewSecurePassword456!',
+                'confirm_new_password': 'BrandNewSecurePassword456!',
             },
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_change_password_mismatched_confirmation(self):
+        """confirm_new_password not matching new_password must return 400."""
+        self.client.force_authenticate(user=self.restaurant_admin)
+        response = self.client.post(
+            reverse('users:change-password'),
+            {
+                'current_password': 'TempPassword123!',
+                'new_password': 'BrandNewSecurePassword456!',
+                'confirm_new_password': 'DifferentPassword789!',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('confirm_new_password', response.data)
 
     def test_me_endpoint_returns_user_profile(self):
         self.client.force_authenticate(user=self.super_admin)
@@ -130,3 +149,4 @@ class UserAuthTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['email'], 'super@profitplate.com')
         self.assertEqual(response.data['role'], UserRole.SUPER_ADMIN)
+        self.assertIn('profile_picture', response.data)

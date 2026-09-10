@@ -69,3 +69,20 @@ class IsSuperAdminOrIsOwner(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
+
+
+class IsSuperAdminOrIsRestaurantAdmin(BasePermission):
+    """
+    Allow access to both SUPER_ADMIN and RESTAURANT_ADMIN users.
+    Used by the create-admin endpoint: Restaurant Admins are further restricted
+    in serializer validation to only assign restaurants they manage.
+    """
+
+    message = 'You must be a Super Admin or Restaurant Admin to perform this action.'
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in ('SUPER_ADMIN', 'RESTAURANT_ADMIN')
+        )

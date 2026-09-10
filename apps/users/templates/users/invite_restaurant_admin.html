@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You're invited to ProfitPlate</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background-color: #F1F5F9; font-family: 'Inter', Arial, sans-serif; color: #1E293B; }
+    .wrapper { max-width: 600px; margin: 40px auto; }
+    /* ── Header ── */
+    .header {
+      background-color: #1E293B;
+      border-radius: 12px 12px 0 0;
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .header img { height: 44px; margin-bottom: 10px; }
+    .header .brand {
+      font-size: 22px; font-weight: 700;
+      color: #FFFFFF; letter-spacing: 0.5px;
+    }
+    .header .tagline { font-size: 13px; color: #94A3B8; margin-top: 4px; }
+    /* ── Body Card ── */
+    .card {
+      background-color: #FFFFFF;
+      padding: 40px;
+      border-left: 1px solid #E2E8F0;
+      border-right: 1px solid #E2E8F0;
+    }
+    .greeting { font-size: 20px; font-weight: 600; color: #1E293B; margin-bottom: 12px; }
+    .intro { font-size: 15px; color: #475569; line-height: 1.7; margin-bottom: 28px; }
+    /* ── Info Box ── */
+    .info-box {
+      background-color: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 28px;
+    }
+    .info-row { display: flex; align-items: flex-start; margin-bottom: 14px; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-label {
+      font-size: 12px; font-weight: 600; color: #64748B;
+      text-transform: uppercase; letter-spacing: 0.6px;
+      min-width: 130px; margin-top: 1px;
+    }
+    .info-value { font-size: 15px; color: #1E293B; font-weight: 500; flex: 1; }
+    /* ── Password Box ── */
+    .password-box {
+      background-color: #1E293B;
+      border-radius: 8px;
+      padding: 16px 24px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+    .password-label { font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .password-value { font-size: 22px; font-weight: 700; color: #FFFFFF; letter-spacing: 3px; font-family: monospace; }
+    /* ── Warning Banner ── */
+    .warning {
+      background-color: #FFF7ED;
+      border: 1px solid #FED7AA;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      display: flex; gap: 12px; align-items: flex-start;
+    }
+    .warning-icon { font-size: 20px; flex-shrink: 0; }
+    .warning-text { font-size: 14px; color: #9A3412; line-height: 1.6; }
+    .warning-text strong { font-weight: 600; }
+    /* ── Steps ── */
+    .steps-title { font-size: 14px; font-weight: 600; color: #1E293B; margin-bottom: 12px; }
+    .steps { list-style: none; margin-bottom: 28px; }
+    .steps li {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 14px; color: #475569; line-height: 1.6; margin-bottom: 10px;
+    }
+    .step-num {
+      background-color: #1E293B; color: #FFFFFF;
+      border-radius: 50%; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+    /* ── Restaurant Tags ── */
+    .restaurants { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .restaurant-tag {
+      background-color: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      color: #1D4ED8;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 13px; font-weight: 500;
+    }
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid #E2E8F0; margin: 24px 0; }
+    .support { font-size: 13px; color: #94A3B8; line-height: 1.6; }
+    .support a { color: #1E293B; text-decoration: none; font-weight: 500; }
+    /* ── Footer ── */
+    .footer {
+      background-color: #F1F5F9;
+      border: 1px solid #E2E8F0;
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      padding: 24px 40px;
+      text-align: center;
+    }
+    .footer p { font-size: 12px; color: #94A3B8; line-height: 1.7; }
+    .footer .company { font-weight: 600; color: #64748B; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Header -->
+    <div class="header">
+      <img src="cid:logo" alt="ProfitPlate Logo" />
+      <div class="brand">ProfitPlate</div>
+      <div class="tagline">Restaurant Cost Management &amp; POS Intelligence</div>
+    </div>
+
+    <!-- Card -->
+    <div class="card">
+      <div class="greeting">Welcome, {{ full_name }}!</div>
+      <p class="intro">
+        You've been invited to join <strong>ProfitPlate</strong> as a <strong>Restaurant Admin</strong>.
+        Your account has been set up and you can log in right away using the credentials below.
+      </p>
+
+      <!-- Assigned Restaurants -->
+      <p class="steps-title">Your Assigned Restaurant(s)</p>
+      <div class="restaurants">
+        {% for name in restaurant_names %}
+          <span class="restaurant-tag"> {{ name }}</span>
+        {% endfor %}
+      </div>
+
+      <!-- Login Info -->
+      <div class="info-box">
+        <div class="info-row">
+          <span class="info-label">Email</span>
+          <span class="info-value">{{ email }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Temporary Password</span>
+          <span class="info-value" style="font-family: monospace; letter-spacing: 2px; color: #DC2626;">↓ See below ↓</span>
+        </div>
+      </div>
+
+      <div class="password-box">
+        <div class="password-label">Your Temporary Password</div>
+        <div class="password-value">{{ password }}</div>
+      </div>
+
+      <!-- Warning -->
+      <div class="warning">
+        <span class="warning-icon">⚠️</span>
+        <div class="warning-text">
+          <strong>This is a temporary password.</strong> You will be required to change it immediately after your first login. Please do not share this email with anyone.
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <p class="steps-title">Getting Started</p>
+      <ol class="steps">
+        <li>
+          <div class="step-num">1</div>
+          <span>Log in to ProfitPlate using your <strong>email</strong> and the <strong>temporary password</strong> above.</span>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <span>You'll be redirected to the <strong>Change Password</strong> screen automatically. Alternatively, go to <strong>Settings → Change Password</strong>.</span>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <span>Choose a strong new password and you're all set to manage your restaurant(s) on ProfitPlate!</span>
+        </li>
+      </ol>
+
+      <hr class="divider" />
+
+      <p class="support">
+        If you have any questions or didn't expect this email, please contact your administrator or reach out to us at
+        <a href="mailto:support@profitplate.com">support@profitplate.com</a>.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>
+        <span class="company">ProfitPlate</span><br />
+        This email was sent because a Super Admin invited you to the ProfitPlate platform.<br />
+        If you believe this was a mistake, please ignore this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

@@ -49,6 +49,13 @@ class User(AbstractUser):
     # screen while this flag is True.
     password_change_required = models.BooleanField(default=False)
 
+    # Optional profile picture — stored in MEDIA_ROOT/profile_pictures/
+    profile_picture = models.ImageField(
+        upload_to='profile_pictures/',
+        null=True,
+        blank=True,
+    )
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
