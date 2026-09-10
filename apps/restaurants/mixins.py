@@ -55,6 +55,19 @@ class RestaurantAccessMixin:
         """Backward-compatible alias for filter_queryset_by_restaurant."""
         return self.filter_queryset_by_restaurant(queryset)
 
+    def get_requested_restaurant_id(self):
+        """
+        Extract restaurant UUID from request query parameters.
+        Supports 'restaurant_id', 'restaurant', 'location_id', and 'location'.
+        """
+        params = getattr(self.request, 'query_params', {})
+        return (
+            params.get('restaurant_id')
+            or params.get('restaurant')
+            or params.get('location_id')
+            or params.get('location')
+        )
+
     def assert_restaurant_access(self, restaurant_id) -> None:
         """
         Raise DRFPermissionDenied if the current user cannot access the

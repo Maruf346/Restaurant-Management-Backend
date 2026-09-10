@@ -61,7 +61,7 @@ class IngredientViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         queryset = self.filter_queryset_by_restaurant(queryset)
-        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        restaurant_id = self.get_requested_restaurant_id()
         if restaurant_id:
             queryset = queryset.filter(restaurant_id=restaurant_id)
         return queryset
@@ -118,7 +118,7 @@ class PurchaseEntryViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         queryset = self.filter_queryset_by_restaurant(queryset)
-        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        restaurant_id = self.get_requested_restaurant_id()
         if restaurant_id:
             queryset = queryset.filter(restaurant_id=restaurant_id)
         return queryset
