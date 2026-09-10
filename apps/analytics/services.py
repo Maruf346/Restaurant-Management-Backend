@@ -23,6 +23,8 @@ class DashboardAnalyticsService:
             profit_margin_pct = Decimal('0')
 
         return {
+            'restaurant_id': target_restaurant.id if target_restaurant else None,
+            'restaurant_name': target_restaurant.name if target_restaurant else '',
             'restaurant': target_restaurant,
             'location': target_restaurant,
             'start_date': start_date,

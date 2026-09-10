@@ -1,14 +1,18 @@
 from decimal import Decimal
-
-from django.test import TestCase
+from django.contrib.auth import get_user_model
+from rest_framework.test import APITestCase
+from rest_framework import status
 
 from apps.inventory.models import Ingredient
-from apps.restaurants.models import Restaurant
+from apps.restaurants.models import Restaurant, UserRestaurant
 from apps.recipes.models import Category, Product, RecipeItem
 from apps.sales.models import DailySalesRecord, SoldDishRecord
+from apps.users.models import UserRole
+
+User = get_user_model()
 
 
-class DashboardAnalyticsTests(TestCase):
+class DashboardAnalyticsTests(APITestCase):
     def setUp(self):
         self.restaurant = Restaurant.objects.create(name='Downtown', code='DT3', currency='USD')
         self.category = Category.objects.create(restaurant=self.restaurant, name='Meals')
@@ -50,6 +54,21 @@ class DashboardAnalyticsTests(TestCase):
         )
         self.sold_item.calculate_metrics()
 
+        # Users
+        self.super_admin = User.objects.create_superuser(
+            email='super@profitplate.com',
+            password='password123',
+            full_name='Super Admin',
+            role=UserRole.SUPER_ADMIN,
+        )
+        self.restaurant_admin = User.objects.create_user(
+            email='admin@downtown.com',
+            password='password123',
+            full_name='Downtown Admin',
+            role=UserRole.RESTAURANT_ADMIN,
+        )
+        UserRestaurant.objects.create(user=self.restaurant_admin, restaurant=self.restaurant)
+
     def test_dashboard_summary_aggregates_profitability(self):
         from apps.analytics.services import DashboardAnalyticsService
 
@@ -69,3 +88,27 @@ class DashboardAnalyticsTests(TestCase):
         self.assertEqual(rows[0]['product_name'], 'Chicken Rice Bowl')
         self.assertEqual(rows[0]['gross_profit'], Decimal('17.55'))
         self.assertEqual(rows[0]['margin_pct'], Decimal('97.50'))
+
+    def test_get_dashboard_analytics_api_endpoint(self):
+        self.client.force_authenticate(user=self.super_admin)
+        url = f"/api/analytics/dashboard/?restaurant_id={self.restaurant.id}&start_date=2026-09-09&end_date=2026-09-09"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('summary', response.data)
+        self.assertIn('dish_performance', response.data)
+        self.assertEqual(response.data['summary']['total_revenue'], '18.00')
+        self.assertEqual(response.data['summary']['restaurant_name'], 'Downtown')
+        self.assertEqual(len(response.data['dish_performance']), 1)
+        self.assertEqual(response.data['dish_performance'][0]['product_name'], 'Chicken Rice Bowl')
+
+    def test_get_dish_performance_api_endpoint(self):
+        self.client.force_authenticate(user=self.restaurant_admin)
+        url = f"/api/analytics/dish-performance/?restaurant_id={self.restaurant.id}&start_date=2026-09-09&end_date=2026-09-09"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('dish_performance', response.data)
+        self.assertEqual(response.data['restaurant_name'], 'Downtown')
+        self.assertEqual(len(response.data['dish_performance']), 1)
+        self.assertEqual(response.data['dish_performance'][0]['product_name'], 'Chicken Rice Bowl')
