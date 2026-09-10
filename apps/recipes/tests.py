@@ -3,19 +3,19 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.inventory.models import Ingredient
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 from apps.recipes.models import Category, Product, RecipeItem
 
 
 class InventoryAndRecipeCalculationTests(TestCase):
     def setUp(self):
-        self.location = Location.objects.create(
+        self.restaurant = Restaurant.objects.create(
             name='Downtown',
             code='DT1',
             currency='USD',
         )
         self.ingredient = Ingredient.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             name='Tomato',
             base_unit='kg',
             current_stock=Decimal('3.000'),
@@ -23,9 +23,9 @@ class InventoryAndRecipeCalculationTests(TestCase):
             latest_purchase_price=Decimal('2.50'),
             min_stock_alert=Decimal('1.000'),
         )
-        self.category = Category.objects.create(location=self.location, name='Mains')
+        self.category = Category.objects.create(restaurant=self.restaurant, name='Mains')
         self.product = Product.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             category=self.category,
             name='Tomato Pasta',
             selling_price=Decimal('20.00'),

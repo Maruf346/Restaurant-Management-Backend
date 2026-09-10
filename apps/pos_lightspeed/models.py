@@ -19,7 +19,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 
 
 class LightspeedConnectionStatus(models.TextChoices):
@@ -31,8 +31,8 @@ class LightspeedConnectionStatus(models.TextChoices):
 
 class LightspeedConfig(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.OneToOneField(
-        Location,
+    restaurant = models.OneToOneField(
+        Restaurant,
         on_delete=models.CASCADE,
         related_name='lightspeed_config',
     )
@@ -71,7 +71,11 @@ class LightspeedConfig(models.Model):
         verbose_name_plural = 'Lightspeed Configurations'
 
     def __str__(self):
-        return f'{self.location.name} — Lightspeed ({self.status})'
+        return f'{self.restaurant.name} — Lightspeed ({self.status})'
+
+    @property
+    def location(self):
+        return self.restaurant
 
     # ── Status helpers ─────────────────────────────────────────────────────
 

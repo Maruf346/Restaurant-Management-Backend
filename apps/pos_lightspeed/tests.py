@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from apps.locations.models import Location, UserLocation
+from apps.restaurants.models import Restaurant, UserRestaurant
 from apps.pos_lightspeed.models import LightspeedConfig, LightspeedConnectionStatus
 from apps.pos_lightspeed.state import OAuthStateManager
 from apps.users.models import User, UserRole
@@ -36,11 +36,11 @@ class LightspeedApiTests(APITestCase):
             role=UserRole.RESTAURANT_ADMIN,
         )
 
-        self.location = Location.objects.create(name='Downtown Bistro', code='DT_BISTRO')
-        UserLocation.objects.create(user=self.restaurant_admin, location=self.location)
+        self.restaurant = Restaurant.objects.create(name='Downtown Bistro', code='DT_BISTRO')
+        UserRestaurant.objects.create(user=self.restaurant_admin, restaurant=self.restaurant)
 
         self.config = LightspeedConfig.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             status=LightspeedConnectionStatus.CONNECTED,
             access_token='super_secret_access_token_123',
             refresh_token='super_secret_refresh_token_456',
@@ -52,7 +52,7 @@ class LightspeedApiTests(APITestCase):
         self.client.force_authenticate(user=self.super_admin)
         response = self.client.get(
             reverse('pos_lightspeed:status'),
-            {'location_id': str(self.location.id)},
+            {'restaurant_id': str(self.restaurant.id)},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -65,11 +65,11 @@ class LightspeedApiTests(APITestCase):
         self.assertEqual(response.data['status'], LightspeedConnectionStatus.CONNECTED)
         self.assertTrue(response.data['connected'])
 
-    def test_restaurant_admin_can_view_assigned_location_status(self):
+    def test_restaurant_admin_can_view_assigned_restaurant_status(self):
         self.client.force_authenticate(user=self.restaurant_admin)
         response = self.client.get(
             reverse('pos_lightspeed:status'),
-            {'location_id': str(self.location.id)},
+            {'restaurant_id': str(self.restaurant.id)},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -77,7 +77,7 @@ class LightspeedApiTests(APITestCase):
         self.client.force_authenticate(user=self.other_admin)
         response = self.client.get(
             reverse('pos_lightspeed:status'),
-            {'location_id': str(self.location.id)},
+            {'restaurant_id': str(self.restaurant.id)},
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -87,7 +87,7 @@ class LightspeedApiTests(APITestCase):
         self.client.force_authenticate(user=self.super_admin)
         response = self.client.get(
             reverse('pos_lightspeed:authorize'),
-            {'location_id': str(self.location.id)},
+            {'restaurant_id': str(self.restaurant.id)},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('authorization_url', response.data)
@@ -97,7 +97,7 @@ class LightspeedApiTests(APITestCase):
         state = response.data['state']
         payload = OAuthStateManager.validate_and_consume_state(state)
         self.assertIsNotNone(payload)
-        self.assertEqual(payload['location_id'], str(self.location.id))
+        self.assertEqual(payload['restaurant_id'], str(self.restaurant.id))
 
     def test_callback_with_invalid_state_fails(self):
         response = self.client.get(
@@ -107,14 +107,14 @@ class LightspeedApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch('apps.pos_lightspeed.oauth.LightspeedOAuthService.exchange_code_for_tokens')
-    def test_callback_success_connects_location(self, mock_exchange):
+    def test_callback_success_connects_restaurant(self, mock_exchange):
         mock_exchange.return_value = {
             'access_token': 'new_access_token_abc',
             'refresh_token': 'new_refresh_token_xyz',
             'expires_in': 3600,
             'account_id': 'acc_123',
         }
-        state = OAuthStateManager.create_state(self.super_admin.id, self.location.id)
+        state = OAuthStateManager.create_state(self.super_admin.id, restaurant_id=self.restaurant.id)
 
         response = self.client.get(
             reverse('pos_lightspeed:callback'),
@@ -138,7 +138,7 @@ class LightspeedApiTests(APITestCase):
         self.client.force_authenticate(user=self.restaurant_admin)
         response = self.client.post(
             reverse('pos_lightspeed:disconnect'),
-            {'location_id': str(self.location.id)},
+            {'restaurant_id': str(self.restaurant.id)},
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)

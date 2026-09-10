@@ -6,7 +6,7 @@ from .models import LightspeedConfig
 @admin.register(LightspeedConfig)
 class LightspeedConfigAdmin(admin.ModelAdmin):
     list_display = (
-        'location',
+        'restaurant',
         'status',
         'requires_reauthorization',
         'auto_sync_enabled',
@@ -16,7 +16,7 @@ class LightspeedConfigAdmin(admin.ModelAdmin):
         'updated_at',
     )
     list_filter = ('status', 'requires_reauthorization', 'auto_sync_enabled')
-    search_fields = ('location__name', 'account_id', 'business_location_id')
+    search_fields = ('restaurant__name', 'account_id', 'business_location_id')
     readonly_fields = (
         'created_at',
         'updated_at',
@@ -26,9 +26,9 @@ class LightspeedConfigAdmin(admin.ModelAdmin):
     )
     # Hide sensitive raw tokens by excluding them or grouping them in a collapsed section
     fieldsets = (
-        ('Location & Status', {
+        ('Restaurant & Status', {
             'fields': (
-                'location',
+                'restaurant',
                 'status',
                 'requires_reauthorization',
                 'auto_sync_enabled',

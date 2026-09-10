@@ -3,13 +3,13 @@ from decimal import Decimal
 
 from django.db import models
 
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 from apps.recipes.models import Product
 
 
 class DailySalesRecord(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='daily_sales')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='daily_sales')
     date = models.DateField()
     total_revenue = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -20,7 +20,7 @@ class DailySalesRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('location', 'date')
+        unique_together = ('restaurant', 'date')
         ordering = ['-date']
 
     def calculate_totals(self):
@@ -40,7 +40,7 @@ class DailySalesRecord(models.Model):
         return self
 
     def __str__(self):
-        return f'{self.location.name} - {self.date}'
+        return f'{self.restaurant.name} - {self.date}'
 
 
 class SoldDishRecord(models.Model):

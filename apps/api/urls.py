@@ -3,7 +3,6 @@ from django.conf.urls.static import static
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-
 urlpatterns = [
     # Auth (login / logout / refresh)
     path('auth/', include('apps.users.auth_urls')),
@@ -11,8 +10,8 @@ urlpatterns = [
     # User profile + management (me, change-password, restaurant-admins)
     path('users/', include('apps.users.urls')),
 
-    # Location management
-    path('locations/', include('apps.locations.urls')),
+    # Restaurant management
+    path('restaurants/', include('apps.restaurants.urls')),
 
     # Inventory
     path('inventory/', include('apps.inventory.urls')),

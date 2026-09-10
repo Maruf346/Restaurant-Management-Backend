@@ -8,7 +8,7 @@ class IngredientSerializer(serializers.ModelSerializer):
         model = Ingredient
         fields = [
             'id',
-            'location',
+            'restaurant',
             'name',
             'base_unit',
             'current_stock',
@@ -22,13 +22,27 @@ class IngredientSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def to_internal_value(self, data):
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        else:
+            data = dict(data)
+        if 'location' in data and 'restaurant' not in data:
+            data['restaurant'] = data.pop('location')
+        return super().to_internal_value(data)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['location'] = ret.get('restaurant')
+        return ret
+
 
 class PurchaseEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseEntry
         fields = [
             'id',
-            'location',
+            'restaurant',
             'ingredient',
             'supplier_name',
             'quantity',
@@ -40,3 +54,17 @@ class PurchaseEntrySerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['id', 'unit_cost', 'created_by', 'created_at']
+
+    def to_internal_value(self, data):
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        else:
+            data = dict(data)
+        if 'location' in data and 'restaurant' not in data:
+            data['restaurant'] = data.pop('location')
+        return super().to_internal_value(data)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['location'] = ret.get('restaurant')
+        return ret

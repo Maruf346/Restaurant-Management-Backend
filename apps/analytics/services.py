@@ -7,8 +7,9 @@ from apps.sales.models import DailySalesRecord, SoldDishRecord
 
 class DashboardAnalyticsService:
     @staticmethod
-    def get_dashboard_summary(location, start_date, end_date):
-        records = DailySalesRecord.objects.filter(location=location, date__range=[start_date, end_date])
+    def get_dashboard_summary(restaurant=None, start_date=None, end_date=None, location=None):
+        target_restaurant = restaurant or location
+        records = DailySalesRecord.objects.filter(restaurant=target_restaurant, date__range=[start_date, end_date])
 
         total_revenue = records.aggregate(total=Sum('total_revenue'))['total'] or Decimal('0')
         total_cost = records.aggregate(total=Sum('total_cost'))['total'] or Decimal('0')
@@ -22,7 +23,8 @@ class DashboardAnalyticsService:
             profit_margin_pct = Decimal('0')
 
         return {
-            'location': location,
+            'restaurant': target_restaurant,
+            'location': target_restaurant,
             'start_date': start_date,
             'end_date': end_date,
             'total_revenue': total_revenue,
@@ -34,9 +36,10 @@ class DashboardAnalyticsService:
         }
 
     @staticmethod
-    def get_dish_performance(location, start_date, end_date):
+    def get_dish_performance(restaurant=None, start_date=None, end_date=None, location=None):
+        target_restaurant = restaurant or location
         items = SoldDishRecord.objects.filter(
-            daily_sales__location=location,
+            daily_sales__restaurant=target_restaurant,
             daily_sales__date__range=[start_date, end_date],
         ).select_related('product', 'daily_sales')
 

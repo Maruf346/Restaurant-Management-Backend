@@ -73,14 +73,22 @@ class User(AbstractUser):
         return self.role == UserRole.RESTAURANT_ADMIN
 
     @property
+    def assigned_restaurants(self):
+        from apps.restaurants.models import Restaurant
+        return Restaurant.objects.filter(user_restaurants__user=self)
+
+    def get_assigned_restaurant_ids(self):
+        """Return a queryset of Restaurant PKs this user can access."""
+        from apps.restaurants.models import UserRestaurant
+        return UserRestaurant.objects.filter(user=self).values_list('restaurant_id', flat=True)
+
+    # Backward-compatible aliases
+    @property
     def assigned_locations(self):
-        from apps.locations.models import Location
-        return Location.objects.filter(user_locations__user=self)
+        return self.assigned_restaurants
 
     def get_assigned_location_ids(self):
-        """Return a queryset of Location PKs this user can access."""
-        from apps.locations.models import UserLocation
-        return UserLocation.objects.filter(user=self).values_list('location_id', flat=True)
+        return self.get_assigned_restaurant_ids()
 
     def __str__(self):
         return self.full_name or self.email

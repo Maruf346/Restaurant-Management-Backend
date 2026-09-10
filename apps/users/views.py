@@ -188,7 +188,7 @@ class ChangePasswordView(APIView):
     summary='Create Restaurant Admin',
     description=(
         'Super Admin only. Create a new Restaurant Admin user with a temporary '
-        'password and assign them to one or more locations. '
+        'password and assign them to one or more restaurants. '
         'The user will be required to change their password on first login '
         '(password_change_required=true).'
     ),

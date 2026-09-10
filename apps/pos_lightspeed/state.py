@@ -5,7 +5,7 @@ Cryptographically secure OAuth state manager using Redis / Django Cache.
 
 State prevents CSRF attacks during the OAuth 2.0 authorization code flow.
 The state token binds the authorization request to the specific user and
-location that initiated it.
+restaurant that initiated it.
 """
 
 import json
@@ -27,15 +27,17 @@ class OAuthStateManager:
         return f"{cls.PREFIX}{state}"
 
     @classmethod
-    def create_state(cls, user_id, location_id) -> str:
+    def create_state(cls, user_id, restaurant_id=None, location_id=None) -> str:
         """
         Generate a cryptographically secure state token, associate it with
-        the user_id and location_id, and store it in Redis with an expiry.
+        the user_id and restaurant_id, and store it in Redis with an expiry.
         """
+        target_id = restaurant_id or location_id
         state = secrets.token_urlsafe(32)
         payload = {
             'user_id': str(user_id),
-            'location_id': str(location_id),
+            'restaurant_id': str(target_id),
+            'location_id': str(target_id),
         }
         cache.set(cls._make_key(state), json.dumps(payload), timeout=cls.TTL_SECONDS)
         return state
@@ -44,7 +46,7 @@ class OAuthStateManager:
     def validate_and_consume_state(cls, state: str) -> Optional[dict]:
         """
         Validate that the state exists in cache, consume it (delete it to prevent
-        replay attacks), and return the stored payload {user_id, location_id}.
+        replay attacks), and return the stored payload {user_id, restaurant_id, location_id}.
         Returns None if the state is invalid or expired.
         """
         if not state:
@@ -59,8 +61,11 @@ class OAuthStateManager:
         cache.delete(key)
 
         try:
-            if isinstance(raw_val, bytes):
-                raw_val = raw_val.decode('utf-8')
-            return json.loads(raw_val)
-        except (ValueError, TypeError):
+            payload = json.loads(raw_val)
+            if 'restaurant_id' not in payload and 'location_id' in payload:
+                payload['restaurant_id'] = payload['location_id']
+            if 'location_id' not in payload and 'restaurant_id' in payload:
+                payload['location_id'] = payload['restaurant_id']
+            return payload
+        except (json.JSONDecodeError, TypeError):
             return None

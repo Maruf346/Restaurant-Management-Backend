@@ -4,18 +4,18 @@ from decimal import Decimal
 from django.db import models
 
 from apps.inventory.models import Ingredient, UnitChoices
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 
 
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='categories')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='categories')
     name = models.CharField(max_length=120)
     color = models.CharField(max_length=30, default='#10b981')
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        unique_together = ('location', 'name')
+        unique_together = ('restaurant', 'name')
         ordering = ['sort_order', 'name']
 
     def __str__(self):
@@ -24,7 +24,7 @@ class Category(models.Model):
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='products')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='products')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     name = models.CharField(max_length=200)
     selling_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -35,7 +35,7 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('location', 'name')
+        unique_together = ('restaurant', 'name')
         ordering = ['name']
 
     def recipe_cost(self):
@@ -55,7 +55,7 @@ class Product(models.Model):
         return (self.gross_profit() / self.selling_price) * Decimal('100')
 
     def __str__(self):
-        return f'{self.name} ({self.location.name})'
+        return f'{self.name} ({self.restaurant.name})'
 
 
 class RecipeItem(models.Model):

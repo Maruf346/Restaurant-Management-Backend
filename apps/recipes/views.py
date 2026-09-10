@@ -1,14 +1,14 @@
 """
 apps/recipes/views.py
 ──────────────────────
-Recipe viewsets with location-level access control.
+Recipe viewsets with restaurant-level access control.
 """
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from apps.locations.mixins import LocationAccessMixin
+from apps.restaurants.mixins import RestaurantAccessMixin
 from .models import Category, Product, RecipeItem
 from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerializer
 
@@ -17,7 +17,7 @@ from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerial
     list=extend_schema(
         tags=['recipes'],
         summary='List categories',
-        description='Return menu categories for the accessible location(s).',
+        description='Return menu categories for the accessible restaurant(s).',
         responses={200: CategorySerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -49,23 +49,24 @@ from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerial
         responses={204: None},
     ),
 )
-class CategoryViewSet(LocationAccessMixin, viewsets.ModelViewSet):
-    queryset = Category.objects.select_related('location').all()
+class CategoryViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
+    queryset = Category.objects.select_related('restaurant').all()
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
+    restaurant_filter_field = 'restaurant_id'
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = self.filter_queryset_by_location(queryset)
-        location_id = self.request.query_params.get('location')
-        if location_id:
-            queryset = queryset.filter(location_id=location_id)
+        queryset = self.filter_queryset_by_restaurant(queryset)
+        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
         return queryset
 
     def perform_create(self, serializer):
-        location = serializer.validated_data.get('location')
-        if location:
-            self.assert_location_access(location.id)
+        restaurant = serializer.validated_data.get('restaurant')
+        if restaurant:
+            self.assert_restaurant_access(restaurant.id)
         serializer.save()
 
 
@@ -105,23 +106,23 @@ class CategoryViewSet(LocationAccessMixin, viewsets.ModelViewSet):
         responses={204: None},
     ),
 )
-class RecipeItemViewSet(LocationAccessMixin, viewsets.ModelViewSet):
-    queryset = RecipeItem.objects.select_related('product__location', 'ingredient').all()
+class RecipeItemViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
+    queryset = RecipeItem.objects.select_related('product__restaurant', 'ingredient').all()
     serializer_class = RecipeItemSerializer
-    # Filter via product → location
-    location_filter_field = 'product__location_id'
+    # Filter via product → restaurant
+    restaurant_filter_field = 'product__restaurant_id'
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        return self.filter_queryset_by_location(queryset)
+        return self.filter_queryset_by_restaurant(queryset)
 
 
 @extend_schema_view(
     list=extend_schema(
         tags=['recipes'],
         summary='List products',
-        description='Return menu products for the accessible location(s).',
+        description='Return menu products for the accessible restaurant(s).',
         responses={200: ProductSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -153,21 +154,22 @@ class RecipeItemViewSet(LocationAccessMixin, viewsets.ModelViewSet):
         responses={204: None},
     ),
 )
-class ProductViewSet(LocationAccessMixin, viewsets.ModelViewSet):
-    queryset = Product.objects.select_related('location', 'category').prefetch_related('recipe_items').all()
+class ProductViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
+    queryset = Product.objects.select_related('restaurant', 'category').prefetch_related('recipe_items').all()
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
+    restaurant_filter_field = 'restaurant_id'
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = self.filter_queryset_by_location(queryset)
-        location_id = self.request.query_params.get('location')
-        if location_id:
-            queryset = queryset.filter(location_id=location_id)
+        queryset = self.filter_queryset_by_restaurant(queryset)
+        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
         return queryset
 
     def perform_create(self, serializer):
-        location = serializer.validated_data.get('location')
-        if location:
-            self.assert_location_access(location.id)
+        restaurant = serializer.validated_data.get('restaurant')
+        if restaurant:
+            self.assert_restaurant_access(restaurant.id)
         serializer.save()

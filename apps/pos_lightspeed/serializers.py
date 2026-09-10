@@ -19,13 +19,15 @@ class LightspeedStatusSerializer(serializers.ModelSerializer):
     Exposes zero secret credentials.
     """
     connected = serializers.SerializerMethodField()
-    location_name = serializers.CharField(source='location.name', read_only=True)
+    restaurant_name = serializers.CharField(source='restaurant.name', read_only=True)
+    location_name = serializers.CharField(source='restaurant.name', read_only=True)
 
     class Meta:
         model = LightspeedConfig
         fields = [
             'id',
-            'location',
+            'restaurant',
+            'restaurant_name',
             'location_name',
             'status',
             'connected',

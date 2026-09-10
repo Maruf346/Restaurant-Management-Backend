@@ -1,14 +1,14 @@
 """
 apps/sales/views.py
 ────────────────────
-Sales viewsets with location-level access control.
+Sales viewsets with restaurant-level access control.
 """
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from apps.locations.mixins import LocationAccessMixin
+from apps.restaurants.mixins import RestaurantAccessMixin
 from .models import DailySalesRecord, SoldDishRecord
 from .serializers import DailySalesRecordSerializer, SoldDishRecordSerializer
 
@@ -17,7 +17,7 @@ from .serializers import DailySalesRecordSerializer, SoldDishRecordSerializer
     list=extend_schema(
         tags=['sales'],
         summary='List daily sales records',
-        description='Return sales totals for each date and accessible location.',
+        description='Return sales totals for each date and accessible restaurant.',
         responses={200: DailySalesRecordSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -49,23 +49,24 @@ from .serializers import DailySalesRecordSerializer, SoldDishRecordSerializer
         responses={204: None},
     ),
 )
-class DailySalesRecordViewSet(LocationAccessMixin, viewsets.ModelViewSet):
-    queryset = DailySalesRecord.objects.select_related('location').prefetch_related('sold_dishes').all()
+class DailySalesRecordViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
+    queryset = DailySalesRecord.objects.select_related('restaurant').prefetch_related('sold_dishes').all()
     serializer_class = DailySalesRecordSerializer
     permission_classes = [IsAuthenticated]
+    restaurant_filter_field = 'restaurant_id'
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = self.filter_queryset_by_location(queryset)
-        location_id = self.request.query_params.get('location')
-        if location_id:
-            queryset = queryset.filter(location_id=location_id)
+        queryset = self.filter_queryset_by_restaurant(queryset)
+        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
         return queryset
 
     def perform_create(self, serializer):
-        location = serializer.validated_data.get('location')
-        if location:
-            self.assert_location_access(location.id)
+        restaurant = serializer.validated_data.get('restaurant')
+        if restaurant:
+            self.assert_restaurant_access(restaurant.id)
         serializer.save()
 
 
@@ -73,7 +74,7 @@ class DailySalesRecordViewSet(LocationAccessMixin, viewsets.ModelViewSet):
     list=extend_schema(
         tags=['sales'],
         summary='List sold dish items',
-        description='Return individual dish sales rows for accessible locations.',
+        description='Return individual dish sales rows for accessible restaurants.',
         responses={200: SoldDishRecordSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -105,17 +106,17 @@ class DailySalesRecordViewSet(LocationAccessMixin, viewsets.ModelViewSet):
         responses={204: None},
     ),
 )
-class SoldDishRecordViewSet(LocationAccessMixin, viewsets.ModelViewSet):
-    queryset = SoldDishRecord.objects.select_related('daily_sales__location', 'product').all()
+class SoldDishRecordViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
+    queryset = SoldDishRecord.objects.select_related('daily_sales__restaurant', 'product').all()
     serializer_class = SoldDishRecordSerializer
-    # Filter via daily_sales → location
-    location_filter_field = 'daily_sales__location_id'
+    # Filter via daily_sales → restaurant
+    restaurant_filter_field = 'daily_sales__restaurant_id'
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        queryset = self.filter_queryset_by_location(queryset)
-        location_id = self.request.query_params.get('location')
-        if location_id:
-            queryset = queryset.filter(daily_sales__location_id=location_id)
+        queryset = self.filter_queryset_by_restaurant(queryset)
+        restaurant_id = self.request.query_params.get('restaurant') or self.request.query_params.get('location')
+        if restaurant_id:
+            queryset = queryset.filter(daily_sales__restaurant_id=restaurant_id)
         return queryset

@@ -40,22 +40,24 @@ def notify_low_stock_alerts():
 
 
 @shared_task
-def notify_lightspeed_sync_completed(location_name='Restaurant', records_synced=0):
+def notify_lightspeed_sync_completed(restaurant_name=None, records_synced=0, location_name=None):
     """Send a success notification after a Lightspeed sales sync completes."""
     from apps.notifications.services import NotificationTemplates
 
+    name = restaurant_name or location_name or 'Restaurant'
     for user in User.objects.filter(is_active=True, is_staff=True):
-        NotificationTemplates.lightspeed_sync_completed(user, location_name, records_synced)
+        NotificationTemplates.lightspeed_sync_completed(user, restaurant_name=name, records_synced=records_synced)
 
     logger.info('Lightspeed sync success notification sent')
 
 
 @shared_task
-def notify_profitability_alert(location_name='Restaurant', food_cost_pct=None):
+def notify_profitability_alert(restaurant_name=None, food_cost_pct=None, location_name=None):
     """Send a dashboard notification if food cost ratio is too high."""
     from apps.notifications.services import NotificationTemplates
 
+    name = restaurant_name or location_name or 'Restaurant'
     for user in User.objects.filter(is_active=True, is_staff=True):
-        NotificationTemplates.profitability_alert(user, location_name, food_cost_pct)
+        NotificationTemplates.profitability_alert(user, restaurant_name=name, food_cost_pct=food_cost_pct)
 
     logger.info('Profitability alert notification sent')

@@ -127,24 +127,26 @@ class NotificationTemplates:
         )
 
     @staticmethod
-    def lightspeed_sync_completed(user, location_name='Restaurant', records_synced=0):
+    def lightspeed_sync_completed(user, restaurant_name=None, records_synced=0, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.LIGHTSPEED_SYNC_COMPLETED,
             title='Lightspeed sync completed',
-            body=f'{location_name} sales were synced successfully. {records_synced} records processed.',
-            data={'location_name': location_name, 'records_synced': records_synced},
+            body=f'{name} sales were synced successfully. {records_synced} records processed.',
+            data={'restaurant_name': name, 'location_name': name, 'records_synced': records_synced},
             priority=NotificationPriority.NORMAL,
         )
 
     @staticmethod
-    def sales_import_completed(user, location_name='Restaurant', total_revenue=0):
+    def sales_import_completed(user, restaurant_name=None, total_revenue=0, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.SALES_IMPORT_COMPLETED,
             title='Sales import complete',
-            body=f'{location_name} sales import finished. Total revenue: {total_revenue:,.2f}.',
-            data={'location_name': location_name, 'total_revenue': float(total_revenue)},
+            body=f'{name} sales import finished. Total revenue: {total_revenue:,.2f}.',
+            data={'restaurant_name': name, 'location_name': name, 'total_revenue': float(total_revenue)},
             priority=NotificationPriority.NORMAL,
         )
 
@@ -160,48 +162,52 @@ class NotificationTemplates:
         )
 
     @staticmethod
-    def profitability_alert(user, location_name='Restaurant', food_cost_pct=None):
+    def profitability_alert(user, restaurant_name=None, food_cost_pct=None, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         if food_cost_pct is None:
             food_cost_pct = 0
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.PROFITABILITY_ALERT,
             title='Food cost alert',
-            body=f'{location_name} food cost is at {food_cost_pct:.1f}%. Review menu pricing and supplier costs.',
-            data={'location_name': location_name, 'food_cost_pct': float(food_cost_pct)},
+            body=f'{name} food cost is at {food_cost_pct:.1f}%. Review menu pricing and supplier costs.',
+            data={'restaurant_name': name, 'location_name': name, 'food_cost_pct': float(food_cost_pct)},
             priority=NotificationPriority.URGENT if float(food_cost_pct) > 35 else NotificationPriority.HIGH,
         )
 
     @staticmethod
-    def recipe_updated(user, product_name, location_name='Restaurant'):
+    def recipe_updated(user, product_name, restaurant_name=None, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.RECIPE_UPDATED,
             title='Recipe updated',
-            body=f'The recipe for {product_name} was updated for {location_name}.',
-            data={'product_name': product_name, 'location_name': location_name},
+            body=f'The recipe for {product_name} was updated for {name}.',
+            data={'product_name': product_name, 'restaurant_name': name, 'location_name': name},
             priority=NotificationPriority.NORMAL,
         )
 
     @staticmethod
-    def purchase_logged(user, ingredient_name, quantity, location_name='Restaurant'):
+    def purchase_logged(user, ingredient_name, quantity, restaurant_name=None, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.PURCHASE_LOGGED,
             title='Purchase recorded',
-            body=f'{quantity} of {ingredient_name} was logged for {location_name}.',
-            data={'ingredient_name': ingredient_name, 'quantity': str(quantity), 'location_name': location_name},
+            body=f'{quantity} of {ingredient_name} was logged for {name}.',
+            data={'ingredient_name': ingredient_name, 'quantity': str(quantity), 'restaurant_name': name, 'location_name': name},
             priority=NotificationPriority.NORMAL,
         )
 
     @staticmethod
-    def menu_item_updated(user, product_name, location_name='Restaurant'):
+    def menu_item_updated(user, product_name, restaurant_name=None, location_name=None):
+        name = restaurant_name or location_name or 'Restaurant'
         NotificationService.send_notification(
             user=user,
             notification_type=NotificationType.MENU_ITEM_UPDATED,
             title='Menu item updated',
-            body=f'{product_name} was updated in {location_name}.',
-            data={'product_name': product_name, 'location_name': location_name},
+            body=f'{product_name} was updated in {name}.',
+            data={'product_name': product_name, 'restaurant_name': name, 'location_name': name},
             priority=NotificationPriority.NORMAL,
         )
 

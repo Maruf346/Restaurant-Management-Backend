@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.inventory.models import Ingredient
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant, UserRestaurant
 from apps.users.models import User
 
 
@@ -17,9 +17,8 @@ class IngredientApiTests(APITestCase):
             full_name='Inventory User',
             is_staff=True,
         )
-        self.location = Location.objects.create(name='Downtown', code='DT5', currency='USD')
-        from apps.locations.models import UserLocation
-        UserLocation.objects.create(user=self.user, location=self.location)
+        self.restaurant = Restaurant.objects.create(name='Downtown', code='DT5', currency='USD')
+        UserRestaurant.objects.create(user=self.user, restaurant=self.restaurant)
 
         token_response = self.client.post(
             reverse('auth:login'),
@@ -35,7 +34,7 @@ class IngredientApiTests(APITestCase):
         create_response = self.client.post(
             reverse('ingredients-list'),
             {
-                'location': str(self.location.id),
+                'restaurant': str(self.restaurant.id),
                 'name': 'Onion',
                 'base_unit': 'kg',
                 'current_stock': '5.000',
@@ -46,4 +45,4 @@ class IngredientApiTests(APITestCase):
         )
 
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Ingredient.objects.filter(name='Onion', location=self.location).exists())
+        self.assertTrue(Ingredient.objects.filter(name='Onion', restaurant=self.restaurant).exists())

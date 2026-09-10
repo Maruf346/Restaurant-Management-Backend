@@ -3,17 +3,17 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.inventory.models import Ingredient
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 from apps.recipes.models import Category, Product, RecipeItem
 from apps.sales.models import DailySalesRecord, SoldDishRecord
 
 
 class DashboardAnalyticsTests(TestCase):
     def setUp(self):
-        self.location = Location.objects.create(name='Downtown', code='DT3', currency='USD')
-        self.category = Category.objects.create(location=self.location, name='Meals')
+        self.restaurant = Restaurant.objects.create(name='Downtown', code='DT3', currency='USD')
+        self.category = Category.objects.create(restaurant=self.restaurant, name='Meals')
         self.ingredient = Ingredient.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             name='Rice',
             base_unit='kg',
             current_stock=Decimal('20.000'),
@@ -22,7 +22,7 @@ class DashboardAnalyticsTests(TestCase):
             min_stock_alert=Decimal('2.000'),
         )
         self.product = Product.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             category=self.category,
             name='Chicken Rice Bowl',
             selling_price=Decimal('18.00'),
@@ -35,7 +35,7 @@ class DashboardAnalyticsTests(TestCase):
         )
 
         self.daily_sales = DailySalesRecord.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             date='2026-09-09',
             total_revenue=Decimal('18.00'),
             total_cost=Decimal('0.45'),
@@ -53,7 +53,7 @@ class DashboardAnalyticsTests(TestCase):
     def test_dashboard_summary_aggregates_profitability(self):
         from apps.analytics.services import DashboardAnalyticsService
 
-        summary = DashboardAnalyticsService.get_dashboard_summary(self.location, '2026-09-09', '2026-09-09')
+        summary = DashboardAnalyticsService.get_dashboard_summary(self.restaurant, '2026-09-09', '2026-09-09')
 
         self.assertEqual(summary['total_revenue'], Decimal('18.00'))
         self.assertEqual(summary['total_cost'], Decimal('0.45'))
@@ -63,7 +63,7 @@ class DashboardAnalyticsTests(TestCase):
     def test_dish_performance_lists_products_with_margin(self):
         from apps.analytics.services import DashboardAnalyticsService
 
-        rows = DashboardAnalyticsService.get_dish_performance(self.location, '2026-09-09', '2026-09-09')
+        rows = DashboardAnalyticsService.get_dish_performance(self.restaurant, '2026-09-09', '2026-09-09')
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['product_name'], 'Chicken Rice Bowl')

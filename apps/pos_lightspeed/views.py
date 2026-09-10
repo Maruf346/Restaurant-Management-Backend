@@ -5,8 +5,8 @@ Business-specific API views for Lightspeed POS OAuth, status, disconnect,
 manual sync, and webhook processing.
 
 Access Control Rules:
-  - SUPER_ADMIN: Can view, authorize, disconnect, and sync any location.
-  - RESTAURANT_ADMIN: Strictly restricted to their assigned location(s).
+  - SUPER_ADMIN: Can view, authorize, disconnect, and sync any restaurant.
+  - RESTAURANT_ADMIN: Strictly restricted to their assigned restaurant(s).
   - Zero sensitive token exposure in any response serializer.
 """
 
@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 from apps.users.permissions import IsSuperAdmin
 
 from .models import LightspeedConfig, LightspeedConnectionStatus
@@ -32,18 +32,21 @@ from .state import OAuthStateManager
 logger = logging.getLogger(__name__)
 
 
-def _check_user_location_access(user, location: Location) -> bool:
-    """Helper to verify if user has access to a location."""
+def _check_user_restaurant_access(user, restaurant: Restaurant) -> bool:
+    """Helper to verify if user has access to a restaurant."""
     if user.is_super_admin:
         return True
-    return user.assigned_locations.filter(pk=location.pk).exists()
+    return user.assigned_restaurants.filter(pk=restaurant.pk).exists()
+
+
+_check_user_location_access = _check_user_restaurant_access
 
 
 class LightspeedStatusView(APIView):
     """
     Get Lightspeed connection status.
-    - If `location_id` is supplied: returns status for that location.
-    - If omitted: returns a list of statuses for all locations accessible to the user.
+    - If `restaurant_id` (or `location_id`) is supplied: returns status for that restaurant.
+    - If omitted: returns a list of statuses for all restaurants accessible to the user.
     """
     permission_classes = [IsAuthenticated]
 
@@ -52,42 +55,54 @@ class LightspeedStatusView(APIView):
         summary='Get Lightspeed connection status',
         description=(
             'Returns safe connection status information without exposing sensitive tokens. '
-            'Filter by `location_id` to get status for a single location.'
+            'Filter by `restaurant_id` (or legacy `location_id`) to get status for a single restaurant.'
         ),
         parameters=[
+            OpenApiParameter(
+                name='restaurant_id',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='UUID of the restaurant to check status for.',
+            ),
             OpenApiParameter(
                 name='location_id',
                 type=str,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description='UUID of the location to check status for.',
+                description='Legacy UUID parameter for backward compatibility.',
             ),
         ],
         responses={200: LightspeedStatusSerializer(many=True)},
     )
     def get(self, request):
-        location_id = request.query_params.get('location_id') or request.query_params.get('location')
+        restaurant_id = (
+            request.query_params.get('restaurant_id')
+            or request.query_params.get('location_id')
+            or request.query_params.get('restaurant')
+            or request.query_params.get('location')
+        )
 
-        if location_id:
-            location = get_object_or_404(Location, pk=location_id)
-            if not _check_user_location_access(request.user, location):
+        if restaurant_id:
+            restaurant = get_object_or_404(Restaurant, pk=restaurant_id)
+            if not _check_user_restaurant_access(request.user, restaurant):
                 return Response(
-                    {'detail': 'You do not have permission to view this location.'},
+                    {'detail': 'You do not have permission to view this restaurant.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            config, _ = LightspeedConfig.objects.get_or_create(location=location)
+            config, _ = LightspeedConfig.objects.get_or_create(restaurant=restaurant)
             serializer = LightspeedStatusSerializer(config)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         # List all accessible configs
         if request.user.is_super_admin:
-            locations = Location.objects.all()
+            restaurants = Restaurant.objects.all()
         else:
-            locations = request.user.assigned_locations.all()
+            restaurants = request.user.assigned_restaurants.all()
 
         configs = []
-        for loc in locations:
-            cfg, _ = LightspeedConfig.objects.get_or_create(location=loc)
+        for rest in restaurants:
+            cfg, _ = LightspeedConfig.objects.get_or_create(restaurant=rest)
             configs.append(cfg)
 
         serializer = LightspeedStatusSerializer(configs, many=True)
@@ -107,31 +122,38 @@ class LightspeedAuthorizeView(APIView):
         description='Returns the authorization URL to redirect the user to Lightspeed for login/consent.',
         parameters=[
             OpenApiParameter(
+                name='restaurant_id',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description='UUID of the restaurant to connect.',
+            ),
+            OpenApiParameter(
                 name='location_id',
                 type=str,
                 location=OpenApiParameter.QUERY,
-                required=True,
-                description='UUID of the restaurant location to connect.',
+                required=False,
+                description='Legacy UUID of the location to connect.',
             ),
         ],
         responses={200: LightspeedAuthorizeUrlSerializer},
     )
     def get(self, request):
-        location_id = request.query_params.get('location_id')
-        if not location_id:
+        restaurant_id = request.query_params.get('restaurant_id') or request.query_params.get('location_id')
+        if not restaurant_id:
             return Response(
-                {'detail': 'location_id query parameter is required.'},
+                {'detail': 'restaurant_id query parameter is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        location = get_object_or_404(Location, pk=location_id)
-        if not _check_user_location_access(request.user, location):
+        restaurant = get_object_or_404(Restaurant, pk=restaurant_id)
+        if not _check_user_restaurant_access(request.user, restaurant):
             return Response(
-                {'detail': 'You do not have permission to configure this location.'},
+                {'detail': 'You do not have permission to configure this restaurant.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        state = OAuthStateManager.create_state(request.user.id, location.id)
+        state = OAuthStateManager.create_state(request.user.id, restaurant_id=restaurant.id)
         try:
             auth_url = LightspeedOAuthService.build_authorization_url(state)
         except LightspeedOAuthError as exc:
@@ -150,7 +172,7 @@ class LightspeedCallbackView(APIView):
     @extend_schema(
         tags=['pos_lightspeed'],
         summary='OAuth callback from Lightspeed',
-        description='Validates OAuth state, exchanges code for tokens, and marks location as connected.',
+        description='Validates OAuth state, exchanges code for tokens, and marks restaurant as connected.',
         parameters=[
             OpenApiParameter(name='code', type=str, location=OpenApiParameter.QUERY, required=True),
             OpenApiParameter(name='state', type=str, location=OpenApiParameter.QUERY, required=True),
@@ -174,11 +196,11 @@ class LightspeedCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        location_id = payload.get('location_id')
+        restaurant_id = payload.get('restaurant_id') or payload.get('location_id')
         try:
-            location = Location.objects.get(pk=location_id)
-        except Location.DoesNotExist:
-            return Response({'detail': 'Location not found.'}, status=status.HTTP_404_NOT_FOUND)
+            restaurant = Restaurant.objects.get(pk=restaurant_id)
+        except Restaurant.DoesNotExist:
+            return Response({'detail': 'Restaurant not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             token_data = LightspeedOAuthService.exchange_code_for_tokens(code)
@@ -195,7 +217,7 @@ class LightspeedCallbackView(APIView):
         account_id = str(token_data.get('account_id', ''))
         expires_at = timezone.now() + timedelta(seconds=expires_in)
 
-        config, _ = LightspeedConfig.objects.get_or_create(location=location)
+        config, _ = LightspeedConfig.objects.get_or_create(restaurant=restaurant)
         config.mark_connected(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -214,7 +236,7 @@ class LightspeedCallbackView(APIView):
 
 class LightspeedDisconnectView(APIView):
     """
-    Disconnects a location from Lightspeed by clearing stored tokens.
+    Disconnects a restaurant from Lightspeed by clearing stored tokens.
     """
     permission_classes = [IsAuthenticated]
 
@@ -222,25 +244,25 @@ class LightspeedDisconnectView(APIView):
         tags=['pos_lightspeed'],
         summary='Disconnect Lightspeed integration',
         description='Clears stored OAuth tokens and resets connection status to DISCONNECTED.',
-        request={'application/json': {'type': 'object', 'properties': {'location_id': {'type': 'string'}}}},
+        request={'application/json': {'type': 'object', 'properties': {'restaurant_id': {'type': 'string'}, 'location_id': {'type': 'string'}}}},
         responses={200: LightspeedStatusSerializer},
     )
     def post(self, request):
-        location_id = request.data.get('location_id')
-        if not location_id:
+        restaurant_id = request.data.get('restaurant_id') or request.data.get('location_id')
+        if not restaurant_id:
             return Response(
-                {'detail': 'location_id is required.'},
+                {'detail': 'restaurant_id is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        location = get_object_or_404(Location, pk=location_id)
-        if not _check_user_location_access(request.user, location):
+        restaurant = get_object_or_404(Restaurant, pk=restaurant_id)
+        if not _check_user_restaurant_access(request.user, restaurant):
             return Response(
-                {'detail': 'You do not have permission to disconnect this location.'},
+                {'detail': 'You do not have permission to disconnect this restaurant.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        config, _ = LightspeedConfig.objects.get_or_create(location=location)
+        config, _ = LightspeedConfig.objects.get_or_create(restaurant=restaurant)
         config.mark_disconnected()
 
         return Response(
@@ -254,7 +276,7 @@ class LightspeedDisconnectView(APIView):
 
 class LightspeedManualSyncView(APIView):
     """
-    Trigger a manual sales synchronization for a specific location.
+    Trigger a manual sales synchronization for a specific restaurant.
     """
     permission_classes = [IsAuthenticated]
 
@@ -269,24 +291,24 @@ class LightspeedManualSyncView(APIView):
         serializer = LightspeedManualSyncSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        location_id = request.data.get('location_id')
-        if not location_id:
+        restaurant_id = request.data.get('restaurant_id') or request.data.get('location_id')
+        if not restaurant_id:
             return Response(
-                {'detail': 'location_id is required.'},
+                {'detail': 'restaurant_id is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        location = get_object_or_404(Location, pk=location_id)
-        if not _check_user_location_access(request.user, location):
+        restaurant = get_object_or_404(Restaurant, pk=restaurant_id)
+        if not _check_user_restaurant_access(request.user, restaurant):
             return Response(
-                {'detail': 'You do not have permission to sync this location.'},
+                {'detail': 'You do not have permission to sync this restaurant.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        config = getattr(location, 'lightspeed_config', None)
+        config = getattr(restaurant, 'lightspeed_config', None)
         if not config or not config.is_connected:
             return Response(
-                {'detail': 'Lightspeed is not connected for this location.'},
+                {'detail': 'Lightspeed is not connected for this restaurant.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -301,7 +323,8 @@ class LightspeedManualSyncView(APIView):
             {
                 'detail': 'Sales sync task queued successfully.',
                 'task_id': str(task_result.id) if hasattr(task_result, 'id') else None,
-                'location_id': str(location.id),
+                'restaurant_id': str(restaurant.id),
+                'location_id': str(restaurant.id),
                 'date': date_str,
             },
             status=status.HTTP_202_ACCEPTED,

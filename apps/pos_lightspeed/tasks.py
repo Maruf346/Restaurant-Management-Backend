@@ -55,7 +55,7 @@ def sync_lightspeed_sales(self, config_id: str, date_str: Optional[str] = None):
     calculate costing metrics, and update DailySalesRecord.
     """
     try:
-        config = LightspeedConfig.objects.select_related('location').get(id=config_id)
+        config = LightspeedConfig.objects.select_related('restaurant').get(id=config_id)
     except LightspeedConfig.DoesNotExist:
         logger.error("LightspeedConfig with id %s does not exist.", config_id)
         return {'error': 'Config not found'}
@@ -70,7 +70,7 @@ def sync_lightspeed_sales(self, config_id: str, date_str: Optional[str] = None):
         fetcher = LightspeedSalesFetcher(config)
         items = fetcher.fetch_orders_for_date(sync_date)
         sync_result = LightspeedSalesSyncService.sync_sales(
-            location=config.location,
+            restaurant=config.restaurant,
             sales_date=sync_date,
             items=items,
         )
@@ -80,13 +80,14 @@ def sync_lightspeed_sales(self, config_id: str, date_str: Optional[str] = None):
 
         logger.info(
             "Successfully synced sales for %s on %s (%d items). Revenue: %s",
-            config.location.name,
+            config.restaurant.name,
             sync_date,
             len(items),
             sync_result.get('total_revenue'),
         )
         return {
-            'location_id': str(config.location.id),
+            'restaurant_id': str(config.restaurant.id),
+            'location_id': str(config.restaurant.id),
             'date': sync_date.isoformat(),
             'items_count': len(items),
             'total_revenue': str(sync_result.get('total_revenue')),

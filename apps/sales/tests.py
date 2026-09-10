@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from apps.inventory.models import Ingredient
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant, UserRestaurant
 from apps.recipes.models import Category, Product, RecipeItem
 from apps.sales.models import DailySalesRecord, SoldDishRecord
 from apps.users.models import User
@@ -14,10 +14,10 @@ from apps.users.models import User
 
 class SalesAnalyticsTests(TestCase):
     def setUp(self):
-        self.location = Location.objects.create(name='Downtown', code='DT2', currency='USD')
-        self.category = Category.objects.create(location=self.location, name='Entrees')
+        self.restaurant = Restaurant.objects.create(name='Downtown', code='DT2', currency='USD')
+        self.category = Category.objects.create(restaurant=self.restaurant, name='Entrees')
         self.ingredient = Ingredient.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             name='Chicken',
             base_unit='kg',
             current_stock=Decimal('10.000'),
@@ -26,7 +26,7 @@ class SalesAnalyticsTests(TestCase):
             min_stock_alert=Decimal('2.000'),
         )
         self.product = Product.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             category=self.category,
             name='Grilled Chicken Bowl',
             selling_price=Decimal('24.00'),
@@ -40,7 +40,7 @@ class SalesAnalyticsTests(TestCase):
 
     def test_sales_snapshot_calculates_profitability(self):
         daily_record = DailySalesRecord.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             date='2026-09-09',
             total_revenue=Decimal('24.00'),
             total_cost=Decimal('2.40'),
@@ -69,7 +69,7 @@ class SalesAnalyticsTests(TestCase):
         from apps.pos_lightspeed.services import LightspeedSalesSyncService
 
         sync_result = LightspeedSalesSyncService.sync_sales(
-            location=self.location,
+            restaurant=self.restaurant,
             sales_date='2026-09-09',
             items=[{
                 'product_name': 'Grilled Chicken Bowl',
@@ -94,13 +94,12 @@ class SalesApiTests(APITestCase):
             full_name='Sales API User',
             is_staff=True,
         )
-        self.location = Location.objects.create(name='Sales Hub', code='SH1', currency='USD')
-        from apps.locations.models import UserLocation
-        UserLocation.objects.create(user=self.user, location=self.location)
+        self.restaurant = Restaurant.objects.create(name='Sales Hub', code='SH1', currency='USD')
+        UserRestaurant.objects.create(user=self.user, restaurant=self.restaurant)
 
-        self.category = Category.objects.create(location=self.location, name='Lunch')
+        self.category = Category.objects.create(restaurant=self.restaurant, name='Lunch')
         self.ingredient = Ingredient.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             name='Beef',
             base_unit='kg',
             current_stock=Decimal('10.000'),
@@ -109,7 +108,7 @@ class SalesApiTests(APITestCase):
             min_stock_alert=Decimal('1.000'),
         )
         self.product = Product.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             category=self.category,
             name='Beef Burger',
             selling_price=Decimal('18.00'),
@@ -130,7 +129,7 @@ class SalesApiTests(APITestCase):
 
     def test_daily_sales_list_endpoint_requires_auth_and_returns_records(self):
         DailySalesRecord.objects.create(
-            location=self.location,
+            restaurant=self.restaurant,
             date='2026-09-09',
             total_revenue=Decimal('18.00'),
             total_cost=Decimal('1.25'),

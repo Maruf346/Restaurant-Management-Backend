@@ -103,9 +103,11 @@ class LightspeedSalesSyncService:
     """
 
     @staticmethod
-    def sync_sales(location, sales_date, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def sync_sales(restaurant=None, sales_date=None, items: List[Dict[str, Any]] = None, location=None) -> Dict[str, Any]:
+        target_restaurant = restaurant or location
+        items = items or []
         daily_record, _ = DailySalesRecord.objects.get_or_create(
-            location=location,
+            restaurant=target_restaurant,
             date=sales_date,
         )
 
@@ -120,10 +122,10 @@ class LightspeedSalesSyncService:
             if not product_name or quantity <= 0:
                 continue
 
-            product = Product.objects.filter(location=location, name=product_name).first()
+            product = Product.objects.filter(restaurant=target_restaurant, name=product_name).first()
             if product is None:
                 product = Product.objects.filter(
-                    location=location,
+                    restaurant=target_restaurant,
                     lightspeed_item_id=str(item.get('product_id', '')),
                 ).first()
             if product is None:
@@ -142,7 +144,8 @@ class LightspeedSalesSyncService:
 
         daily_record.calculate_totals()
         return {
-            'location': location,
+            'restaurant': target_restaurant,
+            'location': target_restaurant,
             'date': sales_date,
             'total_revenue': daily_record.total_revenue,
             'total_cost': daily_record.total_cost,

@@ -1,0 +1,1 @@
+"""apps/restaurants package."""

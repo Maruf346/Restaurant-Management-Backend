@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.locations.models import Location, UserLocation
+from apps.restaurants.models import Restaurant, UserRestaurant
 from apps.users.models import User, UserRole
 
 

@@ -62,9 +62,9 @@ class IsSuperAdminOrReadOnly(BasePermission):
 class IsSuperAdminOrIsOwner(BasePermission):
     """
     Super Admins may access any object.
-    Restaurant Admins may only access objects belonging to their location.
+    Restaurant Admins may only access objects belonging to their restaurant.
     Object-level enforcement is handled separately in get_queryset() via
-    LocationAccessMixin.
+    RestaurantAccessMixin.
     """
 
     def has_permission(self, request, view):

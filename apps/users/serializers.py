@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model, authenticate
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.locations.models import Location, UserLocation
+from apps.restaurants.models import Restaurant, UserRestaurant
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +102,15 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
         style={'input_type': 'password'},
         help_text='Initial temporary password. User will be required to change it on first login.',
     )
+    restaurant_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        help_text='List of Restaurant UUIDs to assign this admin to.',
+        required=False,
+    )
     location_ids = serializers.ListField(
         child=serializers.UUIDField(),
-        help_text='List of Location UUIDs to assign this admin to.',
-        min_length=1,
+        help_text='Backward-compatible alias for restaurant_ids.',
+        required=False,
     )
 
     def validate_email(self, value):
@@ -114,17 +119,25 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
             raise serializers.ValidationError('A user with this email already exists.')
         return value
 
-    def validate_location_ids(self, value):
-        existing = Location.objects.filter(id__in=value).values_list('id', flat=True)
-        missing = set(str(v) for v in value) - set(str(e) for e in existing)
+    def validate(self, attrs):
+        ids = attrs.get('restaurant_ids') or attrs.get('location_ids')
+        if not ids:
+            raise serializers.ValidationError({
+                'restaurant_ids': ['This field is required.']
+            })
+        existing = set(Restaurant.objects.filter(id__in=ids).values_list('id', flat=True))
+        missing = [str(i) for i in ids if i not in existing]
         if missing:
-            raise serializers.ValidationError(
-                f'The following location IDs do not exist: {", ".join(missing)}'
-            )
-        return value
+            raise serializers.ValidationError({
+                'restaurant_ids': [f'The following restaurant IDs do not exist: {", ".join(missing)}']
+            })
+        attrs['resolved_restaurant_ids'] = ids
+        return attrs
 
     def create(self, validated_data):
-        location_ids = validated_data.pop('location_ids')
+        restaurant_ids = validated_data.pop('resolved_restaurant_ids')
+        validated_data.pop('restaurant_ids', None)
+        validated_data.pop('location_ids', None)
         password = validated_data.pop('password')
         requesting_user = self.context['request'].user
 
@@ -138,12 +151,12 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
             is_active=True,
         )
 
-        # Assign to locations
-        locations = Location.objects.filter(id__in=location_ids)
-        for loc in locations:
-            UserLocation.objects.create(
+        # Assign to restaurants
+        restaurants = Restaurant.objects.filter(id__in=restaurant_ids)
+        for rest in restaurants:
+            UserRestaurant.objects.create(
                 user=user,
-                location=loc,
+                restaurant=rest,
                 assigned_by=requesting_user,
             )
 
@@ -152,16 +165,22 @@ class CreateRestaurantAdminSerializer(serializers.Serializer):
 
 class RestaurantAdminSerializer(serializers.ModelSerializer):
     """Read serializer for listing Restaurant Admin users."""
+    assigned_restaurants = serializers.SerializerMethodField()
     assigned_locations = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'email', 'full_name', 'role', 'is_active',
-                  'password_change_required', 'assigned_locations', 'date_joined']
+                  'password_change_required', 'assigned_restaurants',
+                  'assigned_locations', 'date_joined']
         read_only_fields = fields
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_assigned_restaurants(self, obj):
+        from apps.restaurants.serializers import RestaurantSerializer
+        restaurants = Restaurant.objects.filter(user_restaurants__user=obj)
+        return RestaurantSerializer(restaurants, many=True).data
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_assigned_locations(self, obj):
-        from apps.locations.serializers import LocationSerializer
-        locations = Location.objects.filter(user_locations__user=obj)
-        return LocationSerializer(locations, many=True).data
+        return self.get_assigned_restaurants(obj)

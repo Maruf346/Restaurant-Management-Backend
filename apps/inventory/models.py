@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.db import models
 
-from apps.locations.models import Location
+from apps.restaurants.models import Restaurant
 from apps.users.models import User
 
 
@@ -19,7 +19,7 @@ class UnitChoices(models.TextChoices):
 
 class Ingredient(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='ingredients')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='ingredients')
     name = models.CharField(max_length=200)
     base_unit = models.CharField(max_length=20, choices=UnitChoices.choices, default=UnitChoices.GRAM)
     current_stock = models.DecimalField(max_digits=12, decimal_places=3, default=0)
@@ -32,7 +32,7 @@ class Ingredient(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('location', 'name')
+        unique_together = ('restaurant', 'name')
         ordering = ['name']
 
     def convert_quantity_to_base(self, quantity, unit=None):
@@ -82,12 +82,12 @@ class Ingredient(models.Model):
         return self
 
     def __str__(self):
-        return f'{self.name} ({self.location.name})'
+        return f'{self.name} ({self.restaurant.name})'
 
 
 class PurchaseEntry(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='purchase_entries')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='purchase_entries')
     ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name='purchase_entries')
     supplier_name = models.CharField(max_length=200, blank=True, default='')
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
