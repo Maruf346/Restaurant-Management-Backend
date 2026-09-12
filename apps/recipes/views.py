@@ -4,6 +4,7 @@ apps/recipes/views.py
 Recipe viewsets with restaurant-level access control.
 """
 
+from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -50,7 +51,18 @@ from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerial
     ),
 )
 class CategoryViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
-    queryset = Category.objects.select_related('restaurant').all()
+    queryset = (
+        Category.objects.select_related('restaurant')
+        .prefetch_related(
+            Prefetch(
+                'products',
+                queryset=Product.objects.prefetch_related(
+                    Prefetch('recipe_items', queryset=RecipeItem.objects.select_related('ingredient'))
+                ),
+            )
+        )
+        .all()
+    )
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
     restaurant_filter_field = 'restaurant_id'
@@ -159,7 +171,13 @@ class RecipeItemViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
     ),
 )
 class ProductViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
-    queryset = Product.objects.select_related('restaurant', 'category').prefetch_related('recipe_items').all()
+    queryset = (
+        Product.objects.select_related('restaurant', 'category')
+        .prefetch_related(
+            Prefetch('recipe_items', queryset=RecipeItem.objects.select_related('ingredient'))
+        )
+        .all()
+    )
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     restaurant_filter_field = 'restaurant_id'

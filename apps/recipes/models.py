@@ -31,12 +31,17 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True)
     lightspeed_item_id = models.CharField(max_length=150, blank=True, default='', db_index=True)
     description = models.TextField(blank=True, default='')
+    picture = models.ImageField(upload_to='product_pictures/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ('restaurant', 'name')
         ordering = ['name']
+
+    @property
+    def no_of_ingredients(self):
+        return len(self.recipe_items.all())
 
     def recipe_cost(self):
         return sum((item.ingredient_cost() for item in self.recipe_items.all()), Decimal('0'))
