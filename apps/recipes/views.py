@@ -4,15 +4,46 @@ apps/recipes/views.py
 Recipe viewsets with restaurant-level access control.
 """
 
+from decimal import Decimal
+
 from django.db.models import Prefetch
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.restaurants.mixins import RestaurantAccessMixin
-from .models import Category, Product, RecipeItem
-from .serializers import CategorySerializer, ProductSerializer, RecipeItemSerializer
+from .models import Category, Product, RecipeItem, RecentUpdate, UpdateType
+from .serializers import (
+    CategoryPerformanceSerializer,
+    CategorySerializer,
+    ProductSerializer,
+    RecipeItemSerializer,
+    RecentUpdateSerializer,
+)
 
+
+# ---------------------------------------------------------------------------
+# Helper: log a RecentUpdate event
+# ---------------------------------------------------------------------------
+
+def _log_update(*, restaurant, update_type, title, description='', actor_name='System', actor_role='', created_by=None, metadata=None):
+    RecentUpdate.objects.create(
+        restaurant=restaurant,
+        update_type=update_type,
+        title=title,
+        description=description,
+        actor_name=actor_name,
+        actor_role=actor_role,
+        created_by=created_by,
+        metadata=metadata or {},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CategoryViewSet
+# ---------------------------------------------------------------------------
 
 @extend_schema_view(
     list=extend_schema(
@@ -81,6 +112,26 @@ class CategoryViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
             self.assert_restaurant_access(restaurant.id)
         serializer.save()
 
+    @extend_schema(
+        tags=['recipes'],
+        summary='Category performance',
+        description=(
+            'Return average gross margin % and food cost % per category, '
+            'calculated from the selling price and food cost of all active products.'
+        ),
+        responses={200: CategoryPerformanceSerializer(many=True)},
+    )
+    @action(detail=False, methods=['get'], url_path='performance')
+    def performance(self, request):
+        """GET /api/recipes/categories/performance/"""
+        qs = self.get_queryset()
+        serializer = CategoryPerformanceSerializer(qs, many=True, context=self.get_serializer_context())
+        return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# RecipeItemViewSet
+# ---------------------------------------------------------------------------
 
 @extend_schema_view(
     list=extend_schema(
@@ -133,6 +184,60 @@ class RecipeItemViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
             queryset = queryset.filter(product__restaurant_id=restaurant_id)
         return queryset
 
+    def _log_recipe_update(self, product, old_cost):
+        """Log a RECIPE_UPDATED event when an ingredient is added/changed."""
+        new_cost = product.recipe_cost()
+        if old_cost is None or old_cost == 0:
+            description = f'Ingredient added. Food cost is now {new_cost}.'
+        else:
+            delta_pct = ((new_cost - old_cost) / old_cost * 100) if old_cost else Decimal('0')
+            sign = '+' if delta_pct >= 0 else ''
+            description = f'Cost {sign}{delta_pct:.1f}%.'
+
+        actor = None
+        actor_name = 'System'
+        actor_role = ''
+        request = self.request
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            actor = request.user
+            actor_name = getattr(actor, 'get_full_name', lambda: '')() or str(actor)
+            actor_role = getattr(actor, 'role', '') or ''
+
+        _log_update(
+            restaurant=product.restaurant,
+            update_type=UpdateType.RECIPE_UPDATED,
+            title=f'Recipe updated: {product.name}',
+            description=description,
+            actor_name=actor_name,
+            actor_role=actor_role,
+            created_by=actor,
+            metadata={'old_food_cost': str(old_cost), 'new_food_cost': str(new_cost)},
+        )
+
+    def perform_create(self, serializer):
+        product = serializer.validated_data.get('product')
+        old_cost = product.recipe_cost() if product else None
+        instance = serializer.save()
+        if product:
+            self._log_recipe_update(product, old_cost)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        product = instance.product
+        old_cost = product.recipe_cost()
+        serializer.save()
+        self._log_recipe_update(product, old_cost)
+
+    def perform_destroy(self, instance):
+        product = instance.product
+        old_cost = product.recipe_cost()
+        instance.delete()
+        self._log_recipe_update(product, old_cost)
+
+
+# ---------------------------------------------------------------------------
+# ProductViewSet
+# ---------------------------------------------------------------------------
 
 @extend_schema_view(
     list=extend_schema(
@@ -194,4 +299,76 @@ class ProductViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
         restaurant = serializer.validated_data.get('restaurant')
         if restaurant:
             self.assert_restaurant_access(restaurant.id)
-        serializer.save()
+        instance = serializer.save()
+
+        # Determine actor info
+        actor = None
+        actor_name = 'System'
+        actor_role = ''
+        request = self.request
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            actor = request.user
+            actor_name = getattr(actor, 'get_full_name', lambda: '')() or str(actor)
+            actor_role = getattr(actor, 'role', '') or ''
+
+        category_name = instance.category.name if instance.category else 'Uncategorized'
+        _log_update(
+            restaurant=instance.restaurant,
+            update_type=UpdateType.PRODUCT_ADDED,
+            title=f'New product added: {instance.name}',
+            description=f'Added to {category_name} category.',
+            actor_name=actor_name,
+            actor_role=actor_role,
+            created_by=actor,
+            metadata={'product_id': str(instance.id), 'category': category_name},
+        )
+
+
+# ---------------------------------------------------------------------------
+# RecentUpdateViewSet
+# ---------------------------------------------------------------------------
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=['recipes'],
+        summary='List recent updates',
+        description=(
+            'Return the recent activity feed for the restaurant: '
+            'recipe changes, cost alerts, and new products. '
+            'Ordered newest-first. Supports optional `?limit=N` query param (default 20).'
+        ),
+        parameters=[
+            OpenApiParameter(name='limit', description='Max number of updates to return (default 20).', required=False, type=int),
+            OpenApiParameter(name='update_type', description='Filter by event type: recipe_updated | cost_alert | product_added.', required=False, type=str),
+        ],
+        responses={200: RecentUpdateSerializer(many=True)},
+    ),
+)
+class RecentUpdateViewSet(RestaurantAccessMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only viewset for the activity/event feed.
+    Events are auto-generated by the system; no manual creation endpoint is exposed.
+    """
+    queryset = RecentUpdate.objects.select_related('restaurant', 'created_by').all()
+    serializer_class = RecentUpdateSerializer
+    permission_classes = [IsAuthenticated]
+    restaurant_filter_field = 'restaurant_id'
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        queryset = self.filter_queryset_by_restaurant(queryset)
+        restaurant_id = self.get_requested_restaurant_id()
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
+
+        # Optional filter by update_type
+        update_type = self.request.query_params.get('update_type')
+        if update_type:
+            queryset = queryset.filter(update_type=update_type)
+
+        # Limit (default 20)
+        try:
+            limit = int(self.request.query_params.get('limit', 20))
+        except (TypeError, ValueError):
+            limit = 20
+        return queryset[:limit]

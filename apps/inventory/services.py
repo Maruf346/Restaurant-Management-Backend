@@ -4,6 +4,60 @@ from django.db import transaction
 
 from .models import Ingredient, PurchaseEntry, UnitChoices
 
+# Threshold (%) above which a price increase triggers a cost-alert event.
+COST_ALERT_THRESHOLD_PCT = Decimal('5')
+
+
+def _maybe_log_cost_alert(ingredient, old_cost_per_base_unit, new_cost_per_base_unit):
+    """
+    If cost_per_base_unit rose by >= COST_ALERT_THRESHOLD_PCT, create a
+    COST_ALERT RecentUpdate record for the restaurant.  Import is deferred
+    inside the function to avoid a circular import.
+    """
+    if old_cost_per_base_unit is None or old_cost_per_base_unit <= 0:
+        return
+    if new_cost_per_base_unit <= old_cost_per_base_unit:
+        return
+
+    increase_pct = (
+        (new_cost_per_base_unit - old_cost_per_base_unit)
+        / old_cost_per_base_unit
+        * Decimal('100')
+    )
+    if increase_pct < COST_ALERT_THRESHOLD_PCT:
+        return
+
+    # Deferred import to avoid circular dependency (inventory ↔ recipes)
+    from apps.recipes.models import RecipeItem, UpdateType
+    from apps.recipes.models import RecentUpdate
+
+    affected_count = (
+        RecipeItem.objects
+        .filter(ingredient=ingredient)
+        .values('product')
+        .distinct()
+        .count()
+    )
+
+    RecentUpdate.objects.create(
+        restaurant=ingredient.restaurant,
+        update_type=UpdateType.COST_ALERT,
+        title=f'Cost Alert: {ingredient.name}',
+        description=(
+            f'Price increased by {increase_pct:.0f}%. '
+            f'Affects {affected_count} recipe{"s" if affected_count != 1 else "."}'
+        ),
+        actor_name='System',
+        actor_role='Inventory',
+        metadata={
+            'ingredient_id': str(ingredient.id),
+            'old_cost_per_base_unit': str(old_cost_per_base_unit),
+            'new_cost_per_base_unit': str(new_cost_per_base_unit),
+            'increase_pct': str(round(increase_pct, 2)),
+            'recipes_affected': affected_count,
+        },
+    )
+
 UNIT_FAMILIES = {
     # Mass
     UnitChoices.GRAM: ('mass', Decimal('1')),
@@ -67,6 +121,9 @@ def record_purchase_entry(*, restaurant, ingredient_id, quantity, unit, purchase
         if ingredient.restaurant_id != restaurant.id:
             raise ValidationError({'ingredient': 'Ingredient does not belong to the selected restaurant.'})
 
+        # Snapshot old cost before mutation (for cost-alert comparison)
+        old_cost_per_base_unit = ingredient.cost_per_base_unit
+
         # Calculate base unit quantity
         base_quantity = convert_units(quantity, from_unit=unit, to_unit=ingredient.base_unit)
         if base_quantity <= Decimal('0'):
@@ -100,6 +157,9 @@ def record_purchase_entry(*, restaurant, ingredient_id, quantity, unit, purchase
             purchase_date=purchase_date,
             created_by=created_by,
         )
+
+        # Fire cost-alert if price rose significantly
+        _maybe_log_cost_alert(ingredient, old_cost_per_base_unit, ingredient.cost_per_base_unit)
 
         return purchase
 

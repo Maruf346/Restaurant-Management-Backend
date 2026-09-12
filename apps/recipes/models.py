@@ -18,6 +18,21 @@ class Category(models.Model):
         unique_together = ('restaurant', 'name')
         ordering = ['sort_order', 'name']
 
+    def avg_margin_percentage(self):
+        products = [p for p in self.products.all() if p.is_active]
+        if not products:
+            return Decimal('0')
+        total_selling = sum((p.selling_price for p in products), Decimal('0'))
+        if total_selling > 0:
+            total_profit = sum((p.gross_profit() for p in products), Decimal('0'))
+            return (total_profit / total_selling) * Decimal('100')
+        margins = [p.margin_percentage() for p in products]
+        return sum(margins, Decimal('0')) / Decimal(len(margins))
+
+    def avg_food_cost_percentage(self):
+        margin = self.avg_margin_percentage()
+        return max(Decimal('100') - margin, Decimal('0')) if margin > 0 else Decimal('0')
+
     def __str__(self):
         return self.name
 
@@ -79,3 +94,28 @@ class RecipeItem(models.Model):
 
     def __str__(self):
         return f'{self.product.name} - {self.ingredient.name}'
+
+
+class UpdateType(models.TextChoices):
+    RECIPE_UPDATED = 'recipe_updated', 'Recipe Updated'
+    COST_ALERT = 'cost_alert', 'Cost Alert'
+    PRODUCT_ADDED = 'product_added', 'Product Added'
+
+
+class RecentUpdate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='recent_updates')
+    update_type = models.CharField(max_length=50, choices=UpdateType.choices, default=UpdateType.RECIPE_UPDATED)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default='')
+    actor_name = models.CharField(max_length=150, blank=True, default='System')
+    actor_role = models.CharField(max_length=80, blank=True, default='')
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_updates')
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} ({self.restaurant.name})'
