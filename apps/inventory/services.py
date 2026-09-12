@@ -102,6 +102,27 @@ def convert_units(quantity, from_unit, to_unit):
     return canonical_qty / to_factor
 
 
+def adjust_stock_for_recipe_item(ingredient_id, delta_base_qty):
+    """
+    Atomically adjust an ingredient's current_stock by *delta_base_qty*
+    (already converted to the ingredient's base unit).
+
+    Convention:
+      +delta → stock is consumed (ingredient added/increased in a recipe)
+      -delta → stock is restored  (ingredient removed/decreased from a recipe)
+
+    Must be called inside a transaction.atomic() block.
+    Uses select_for_update() to prevent concurrent stock corruption.
+    """
+    delta_base_qty = Decimal(str(delta_base_qty))
+    if delta_base_qty == Decimal('0'):
+        return
+
+    ingredient = Ingredient.objects.select_for_update().get(id=ingredient_id)
+    ingredient.current_stock -= delta_base_qty          # subtract: usage reduces stock
+    ingredient.save(update_fields=['current_stock', 'updated_at'])
+
+
 def record_purchase_entry(*, restaurant, ingredient_id, quantity, unit, purchase_price, purchase_date, supplier_name='', created_by=None):
     """
     Record a new purchase entry, update the ingredient stock atomically,

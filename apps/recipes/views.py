@@ -6,6 +6,7 @@ Recipe viewsets with restaurant-level access control.
 
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Prefetch
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import viewsets
@@ -215,23 +216,67 @@ class RecipeItemViewSet(RestaurantAccessMixin, viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        from apps.inventory.services import adjust_stock_for_recipe_item, convert_units
+
         product = serializer.validated_data.get('product')
         old_cost = product.recipe_cost() if product else None
-        instance = serializer.save()
+
+        with transaction.atomic():
+            instance = serializer.save()
+            # Deduct stock: new ingredient is now consumed by this recipe
+            base_qty = convert_units(
+                instance.quantity,
+                from_unit=instance.unit,
+                to_unit=instance.ingredient.base_unit,
+            )
+            adjust_stock_for_recipe_item(instance.ingredient_id, base_qty)
+
         if product:
             self._log_recipe_update(product, old_cost)
 
     def perform_update(self, serializer):
+        from apps.inventory.services import adjust_stock_for_recipe_item, convert_units
+
         instance = serializer.instance
         product = instance.product
         old_cost = product.recipe_cost()
-        serializer.save()
+
+        with transaction.atomic():
+            # Capture old values before overwrite
+            old_base_qty = convert_units(
+                instance.quantity,
+                from_unit=instance.unit,
+                to_unit=instance.ingredient.base_unit,
+            )
+            saved = serializer.save()
+            new_base_qty = convert_units(
+                saved.quantity,
+                from_unit=saved.unit,
+                to_unit=saved.ingredient.base_unit,
+            )
+            # Delta: net change in usage (positive = more consumed, negative = less)
+            delta = new_base_qty - old_base_qty
+            if delta != 0:
+                adjust_stock_for_recipe_item(saved.ingredient_id, delta)
+
         self._log_recipe_update(product, old_cost)
 
     def perform_destroy(self, instance):
+        from apps.inventory.services import adjust_stock_for_recipe_item, convert_units
+
         product = instance.product
         old_cost = product.recipe_cost()
-        instance.delete()
+
+        with transaction.atomic():
+            # Restore stock: ingredient is no longer consumed by this recipe
+            base_qty = convert_units(
+                instance.quantity,
+                from_unit=instance.unit,
+                to_unit=instance.ingredient.base_unit,
+            )
+            instance.delete()
+            adjust_stock_for_recipe_item(instance.ingredient_id, -base_qty)
+
         self._log_recipe_update(product, old_cost)
 
 

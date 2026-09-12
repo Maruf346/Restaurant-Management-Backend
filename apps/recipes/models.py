@@ -47,6 +47,12 @@ class Product(models.Model):
     lightspeed_item_id = models.CharField(max_length=150, blank=True, default='', db_index=True)
     description = models.TextField(blank=True, default='')
     picture = models.ImageField(upload_to='product_pictures/', blank=True, null=True)
+    thumbnail_color = models.CharField(
+        max_length=30,
+        blank=True,
+        default='#10b981',
+        help_text='Fallback hex color shown when no product picture is uploaded (e.g. #ffffff).',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
