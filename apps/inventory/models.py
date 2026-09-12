@@ -36,21 +36,9 @@ class Ingredient(models.Model):
         ordering = ['name']
 
     def convert_quantity_to_base(self, quantity, unit=None):
-        quantity = Decimal(str(quantity))
+        from .services import convert_units
         unit = unit or self.base_unit
-
-        conversion_map = {
-            UnitChoices.GRAM: Decimal('1'),
-            UnitChoices.KILOGRAM: Decimal('1000'),
-            UnitChoices.MILLILITER: Decimal('1'),
-            UnitChoices.LITER: Decimal('1000'),
-            UnitChoices.PIECE: Decimal('1'),
-            UnitChoices.PACK: Decimal('1'),
-            UnitChoices.DOZEN: Decimal('12'),
-        }
-
-        factor = conversion_map.get(unit, Decimal('1'))
-        return quantity * factor if unit != self.base_unit else quantity
+        return convert_units(quantity, from_unit=unit, to_unit=self.base_unit)
 
     def cost_for_quantity(self, quantity, unit=None):
         if self.cost_per_base_unit <= 0:
@@ -100,6 +88,10 @@ class PurchaseEntry(models.Model):
 
     class Meta:
         ordering = ['-purchase_date', '-created_at']
+
+    @property
+    def base_quantity(self):
+        return self.ingredient.convert_quantity_to_base(self.quantity, self.unit)
 
     def __str__(self):
         return f'{self.ingredient.name} - {self.quantity} {self.unit}'
