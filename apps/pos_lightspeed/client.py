@@ -1,14 +1,4 @@
-"""
-apps/pos_lightspeed/client.py
-─────────────────────────────
-Lightspeed K-Series REST API Client.
-
-Features:
-  - Automatic token freshness check before every request
-  - Automatic single-retry on 401 Unauthorized via token refresh
-  - Configurable endpoints with timeout protection
-"""
-
+from abc import ABC, abstractmethod
 import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -16,7 +6,7 @@ from urllib.parse import urljoin
 from django.conf import settings
 import requests
 
-from .models import LightspeedConfig
+from .models import LightspeedAppCredential, LightspeedConfig, POSProvider
 from .token_refresh import LightspeedTokenRefreshService
 
 logger = logging.getLogger(__name__)
@@ -30,9 +20,10 @@ class LightspeedApiError(Exception):
         self.response_text = response_text
 
 
-class LightspeedApiClient:
+class BaseLightspeedApiClient(ABC):
     """
-    Client for interacting with the Lightspeed K-Series REST API.
+    Abstract base client for interacting with Lightspeed REST APIs.
+    Provides automated token refresh, 401 retry, and common request infrastructure.
     """
     DEFAULT_BASE_URL = 'https://api.ikentoo.com'
     DEFAULT_TIMEOUT = 30  # seconds
@@ -42,7 +33,21 @@ class LightspeedApiClient:
 
     @property
     def base_url(self) -> str:
-        return getattr(settings, 'LIGHTSPEED_API_BASE_URL', self.DEFAULT_BASE_URL)
+        """
+        Lookup API base URL from the database credential config, or fallback to settings/defaults.
+        """
+        try:
+            cred = LightspeedAppCredential.objects.filter(
+                series=self.config.series,
+                is_active=True,
+            ).first()
+            if cred and cred.api_base_url:
+                return cred.api_base_url
+        except Exception:
+            pass
+
+        prefix = 'LIGHTSPEED_L_' if self.config.series == POSProvider.LIGHTSPEED_L else 'LIGHTSPEED_'
+        return getattr(settings, f'{prefix}API_BASE_URL', getattr(settings, 'LIGHTSPEED_API_BASE_URL', self.DEFAULT_BASE_URL))
 
     def _ensure_valid_token(self) -> str:
         """
@@ -112,11 +117,24 @@ class LightspeedApiClient:
         except ValueError as exc:
             raise LightspeedApiError("Failed to decode JSON response from Lightspeed") from exc
 
+    @abstractmethod
     def get_orders(self, date_from: str, date_to: str, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Fetch finalized orders/financial items between date_from and date_to (inclusive).
-        Expected dates in ISO 8601 or YYYY-MM-DD format.
-        """
+        """Fetch finalized orders between date_from and date_to (inclusive)."""
+        pass
+
+    @abstractmethod
+    def get_products(self, **kwargs) -> List[Dict[str, Any]]:
+        """Fetch catalog products/menu items for mapping."""
+        pass
+
+
+class KSeriesApiClient(BaseLightspeedApiClient):
+    """
+    Client for interacting with the Lightspeed K-Series (iKentoo) REST API.
+    """
+    DEFAULT_BASE_URL = 'https://api.ikentoo.com'
+
+    def get_orders(self, date_from: str, date_to: str, **kwargs) -> List[Dict[str, Any]]:
         params = {
             'date_from': date_from,
             'date_to': date_to,
@@ -133,9 +151,6 @@ class LightspeedApiClient:
         return []
 
     def get_products(self, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Fetch catalog products/menu items for mapping.
-        """
         params = {}
         if self.config.business_location_id:
             params['business_location_id'] = self.config.business_location_id
@@ -147,3 +162,64 @@ class LightspeedApiClient:
         if isinstance(result, dict) and 'products' in result:
             return result['products']
         return []
+
+
+class LSeriesApiClient(BaseLightspeedApiClient):
+    """
+    Client for interacting with the Lightspeed L-Series (Restaurant POS / Hospitality) REST API.
+    """
+    DEFAULT_BASE_URL = 'https://api.lightspeedhq.com'
+
+    def get_orders(self, date_from: str, date_to: str, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Fetch orders for Lightspeed L-Series.
+        """
+        params = {
+            'startDate': date_from,
+            'endDate': date_to,
+        }
+        if self.config.business_location_id:
+            params['locationId'] = self.config.business_location_id
+        params.update(kwargs)
+
+        # L-Series endpoints can be customized or pointed to specific paths
+        result = self._request('GET', '/v1/orders', params=params)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict) and 'orders' in result:
+            return result['orders']
+        return []
+
+    def get_products(self, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Fetch menu items/products for Lightspeed L-Series.
+        """
+        params = {}
+        if self.config.business_location_id:
+            params['locationId'] = self.config.business_location_id
+        params.update(kwargs)
+
+        result = self._request('GET', '/v1/products', params=params)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict) and 'products' in result:
+            return result['products']
+        return []
+
+
+def get_lightspeed_client(config: LightspeedConfig) -> BaseLightspeedApiClient:
+    """
+    Factory function to instantiate the appropriate API client based on config.series.
+    """
+    if config.series == POSProvider.LIGHTSPEED_L:
+        return LSeriesApiClient(config)
+    return KSeriesApiClient(config)
+
+
+# Backward compatibility alias
+class LightspeedApiClient:
+    """
+    Backwards-compatible wrapper delegating to the appropriate series client.
+    """
+    def __new__(cls, config: LightspeedConfig):
+        return get_lightspeed_client(config)

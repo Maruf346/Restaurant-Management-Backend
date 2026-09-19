@@ -19,6 +19,7 @@ class LightspeedStatusSerializer(serializers.ModelSerializer):
     Exposes zero secret credentials.
     """
     connected = serializers.SerializerMethodField()
+    series_display = serializers.CharField(source='get_series_display', read_only=True)
     restaurant_name = serializers.CharField(source='restaurant.name', read_only=True)
     location_name = serializers.CharField(source='restaurant.name', read_only=True)
 
@@ -29,6 +30,8 @@ class LightspeedStatusSerializer(serializers.ModelSerializer):
             'restaurant',
             'restaurant_name',
             'location_name',
+            'series',
+            'series_display',
             'status',
             'connected',
             'requires_reauthorization',
@@ -51,6 +54,7 @@ class LightspeedAuthorizeUrlSerializer(serializers.Serializer):
     """Response serializer returning the OAuth authorization URL to redirect to."""
     authorization_url = serializers.URLField()
     state = serializers.CharField()
+    series = serializers.CharField(required=False, default='k_series')
 
 
 class LightspeedManualSyncSerializer(serializers.Serializer):

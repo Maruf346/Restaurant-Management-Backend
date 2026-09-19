@@ -22,6 +22,58 @@ from django.utils import timezone
 from apps.restaurants.models import Restaurant
 
 
+class POSProvider(models.TextChoices):
+    LIGHTSPEED_K = 'k_series', 'Lightspeed K-Series'
+    LIGHTSPEED_L = 'l_series', 'Lightspeed L-Series'
+
+
+class LightspeedAppCredential(models.Model):
+    """
+    Platform-level OAuth credentials, endpoints, and settings for each Lightspeed series.
+    Configured ONLY via Django Admin (never exposed in customer/client-facing APIs).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    series = models.CharField(
+        max_length=20,
+        choices=POSProvider.choices,
+        unique=True,
+        db_index=True,
+        help_text='The Lightspeed product series (e.g. K-Series or L-Series).',
+    )
+    client_id = models.CharField(max_length=255, help_text='OAuth Client ID provided by Lightspeed.')
+    client_secret = models.CharField(max_length=255, help_text='OAuth Client Secret provided by Lightspeed.')
+    redirect_uri = models.CharField(max_length=500, help_text='Registered OAuth Redirect URI.')
+
+    auth_url = models.URLField(
+        max_length=500,
+        default='https://cloud.lightspeedapp.com/oauth/authorize.php',
+        help_text='OAuth authorization endpoint.',
+    )
+    token_url = models.URLField(
+        max_length=500,
+        default='https://cloud.lightspeedapp.com/oauth/access_token.php',
+        help_text='OAuth token exchange and refresh endpoint.',
+    )
+    api_base_url = models.URLField(
+        max_length=500,
+        default='https://api.ikentoo.com',
+        help_text='Base URL for REST API endpoints.',
+    )
+    scope = models.CharField(max_length=255, default='employee:all', blank=True, help_text='OAuth scopes requested.')
+    is_active = models.BooleanField(default=True, help_text='Whether this credential configuration is currently active.')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Lightspeed App Credential'
+        verbose_name_plural = 'Lightspeed App Credentials'
+        ordering = ['series']
+
+    def __str__(self):
+        return f'{self.get_series_display()} Credentials'
+
+
 class LightspeedConnectionStatus(models.TextChoices):
     CONNECTED = 'CONNECTED', 'Connected'
     REAUTH_REQUIRED = 'REAUTH_REQUIRED', 'Reauthorization Required'
@@ -35,6 +87,13 @@ class LightspeedConfig(models.Model):
         Restaurant,
         on_delete=models.CASCADE,
         related_name='lightspeed_config',
+    )
+    series = models.CharField(
+        max_length=20,
+        choices=POSProvider.choices,
+        default=POSProvider.LIGHTSPEED_K,
+        db_index=True,
+        help_text='The Lightspeed series configured for this restaurant location.',
     )
 
     # ── Connection status ──────────────────────────────────────────────────
@@ -71,7 +130,7 @@ class LightspeedConfig(models.Model):
         verbose_name_plural = 'Lightspeed Configurations'
 
     def __str__(self):
-        return f'{self.restaurant.name} — Lightspeed ({self.status})'
+        return f'{self.restaurant.name} — {self.get_series_display()} ({self.status})'
 
     @property
     def location(self):
@@ -102,6 +161,7 @@ class LightspeedConfig(models.Model):
         expires_at,
         account_id: str = '',
         business_location_id: str = '',
+        series: str = '',
     ) -> None:
         """
         Atomically save new tokens and mark the connection as CONNECTED.
@@ -117,10 +177,12 @@ class LightspeedConfig(models.Model):
             self.account_id = account_id
         if business_location_id:
             self.business_location_id = business_location_id
+        if series:
+            self.series = series
         self.save(update_fields=[
             'access_token', 'refresh_token', 'token_expires_at',
             'status', 'requires_reauthorization', 'last_error',
-            'account_id', 'business_location_id', 'updated_at',
+            'account_id', 'business_location_id', 'series', 'updated_at',
         ])
 
     def mark_reauth_required(self, error_message: str = '') -> None:

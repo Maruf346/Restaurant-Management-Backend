@@ -104,7 +104,10 @@ class LightspeedTokenRefreshService:
                 return config
 
             try:
-                token_data = LightspeedOAuthService.refresh_access_token(config.refresh_token)
+                token_data = LightspeedOAuthService.refresh_access_token(
+                    refresh_token=config.refresh_token,
+                    series=config.series,
+                )
             except LightspeedOAuthError as exc:
                 logger.error(
                     "Lightspeed refresh failed for config %s: %s (status: %s)",

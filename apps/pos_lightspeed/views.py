@@ -24,7 +24,7 @@ from rest_framework.views import APIView
 from apps.restaurants.models import Restaurant
 from apps.users.permissions import IsSuperAdmin
 
-from .models import LightspeedConfig, LightspeedConnectionStatus
+from .models import LightspeedConfig, LightspeedConnectionStatus, POSProvider
 from .oauth import LightspeedOAuthError, LightspeedOAuthService
 from .serializers import *
 from .state import OAuthStateManager
@@ -112,7 +112,7 @@ class LightspeedStatusView(APIView):
 class LightspeedAuthorizeView(APIView):
     """
     Initiates OAuth 2.0 flow by generating a secure state token and returning
-    the Lightspeed authorization URL.
+    the Lightspeed authorization URL for the requested series (K-Series or L-Series).
     """
     permission_classes = [IsAuthenticated]
 
@@ -135,6 +135,15 @@ class LightspeedAuthorizeView(APIView):
                 required=False,
                 description='Legacy UUID of the location to connect.',
             ),
+            OpenApiParameter(
+                name='series',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                enum=[POSProvider.LIGHTSPEED_K, POSProvider.LIGHTSPEED_L],
+                default=POSProvider.LIGHTSPEED_K,
+                description='The Lightspeed series to connect: k_series or l_series.',
+            ),
         ],
         responses={200: LightspeedAuthorizeUrlSerializer},
     )
@@ -153,13 +162,31 @@ class LightspeedAuthorizeView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        state = OAuthStateManager.create_state(request.user.id, restaurant_id=restaurant.id)
+        series = request.query_params.get('series') or POSProvider.LIGHTSPEED_K
+        if series not in POSProvider.values:
+            return Response(
+                {'detail': f"Invalid series '{series}'. Allowed values: {POSProvider.values}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        state = OAuthStateManager.create_state(
+            request.user.id,
+            restaurant_id=restaurant.id,
+            series=series,
+        )
         try:
-            auth_url = LightspeedOAuthService.build_authorization_url(state)
+            auth_url = LightspeedOAuthService.build_authorization_url(state=state, series=series)
         except LightspeedOAuthError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({'authorization_url': auth_url, 'state': state}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                'authorization_url': auth_url,
+                'state': state,
+                'series': series,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LightspeedCallbackView(APIView):
@@ -197,15 +224,17 @@ class LightspeedCallbackView(APIView):
             )
 
         restaurant_id = payload.get('restaurant_id') or payload.get('location_id')
+        series = payload.get('series') or POSProvider.LIGHTSPEED_K
+
         try:
             restaurant = Restaurant.objects.get(pk=restaurant_id)
         except Restaurant.DoesNotExist:
             return Response({'detail': 'Restaurant not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            token_data = LightspeedOAuthService.exchange_code_for_tokens(code)
+            token_data = LightspeedOAuthService.exchange_code_for_tokens(code=code, series=series)
         except LightspeedOAuthError as exc:
-            logger.error("Token exchange failed in callback: %s", exc)
+            logger.error("Token exchange failed in callback (%s): %s", series, exc)
             return Response(
                 {'detail': f'OAuth token exchange failed: {exc}'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -218,6 +247,7 @@ class LightspeedCallbackView(APIView):
         expires_at = timezone.now() + timedelta(seconds=expires_in)
 
         config, _ = LightspeedConfig.objects.get_or_create(restaurant=restaurant)
+        config.series = series
         config.mark_connected(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -227,7 +257,7 @@ class LightspeedCallbackView(APIView):
 
         return Response(
             {
-                'detail': 'Lightspeed account connected successfully.',
+                'detail': f'Lightspeed {config.get_series_display()} connected successfully.',
                 'config': LightspeedStatusSerializer(config).data,
             },
             status=status.HTTP_200_OK,

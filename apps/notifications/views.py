@@ -4,7 +4,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import extend_schema, extend_schema_view
 import logging
 

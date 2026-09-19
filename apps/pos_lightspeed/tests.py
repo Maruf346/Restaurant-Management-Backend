@@ -148,3 +148,44 @@ class LightspeedApiTests(APITestCase):
         self.assertEqual(self.config.access_token, '')
         self.assertEqual(self.config.refresh_token, '')
         self.assertIsNone(self.config.token_expires_at)
+
+    @patch('apps.pos_lightspeed.oauth.LightspeedOAuthService.get_client_id', return_value='l_series_client')
+    @patch('apps.pos_lightspeed.oauth.LightspeedOAuthService.get_redirect_uri', return_value='https://test.com/cb')
+    def test_authorize_l_series_flow(self, mock_uri, mock_id):
+        self.client.force_authenticate(user=self.super_admin)
+        response = self.client.get(
+            reverse('pos_lightspeed:authorize'),
+            {'restaurant_id': str(self.restaurant.id), 'series': 'l_series'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['series'], 'l_series')
+
+        state = response.data['state']
+        payload = OAuthStateManager.validate_and_consume_state(state)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload['series'], 'l_series')
+
+    @patch('apps.pos_lightspeed.oauth.LightspeedOAuthService.exchange_code_for_tokens')
+    def test_callback_saves_series_on_config(self, mock_exchange):
+        mock_exchange.return_value = {
+            'access_token': 'l_token_123',
+            'refresh_token': 'l_refresh_456',
+            'expires_in': 7200,
+            'account_id': 'l_acc_777',
+        }
+        state = OAuthStateManager.create_state(
+            self.super_admin.id,
+            restaurant_id=self.restaurant.id,
+            series='l_series',
+        )
+
+        response = self.client.get(
+            reverse('pos_lightspeed:callback'),
+            {'code': 'test_l_code', 'state': state},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.series, 'l_series')
+        self.assertEqual(self.config.status, LightspeedConnectionStatus.CONNECTED)
+        self.assertEqual(self.config.access_token, 'l_token_123')

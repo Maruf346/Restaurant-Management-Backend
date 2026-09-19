@@ -27,10 +27,10 @@ class OAuthStateManager:
         return f"{cls.PREFIX}{state}"
 
     @classmethod
-    def create_state(cls, user_id, restaurant_id=None, location_id=None) -> str:
+    def create_state(cls, user_id, restaurant_id=None, location_id=None, series: str = 'k_series') -> str:
         """
         Generate a cryptographically secure state token, associate it with
-        the user_id and restaurant_id, and store it in Redis with an expiry.
+        the user_id, restaurant_id, and series, and store it in Redis with an expiry.
         """
         target_id = restaurant_id or location_id
         state = secrets.token_urlsafe(32)
@@ -38,6 +38,7 @@ class OAuthStateManager:
             'user_id': str(user_id),
             'restaurant_id': str(target_id),
             'location_id': str(target_id),
+            'series': series or 'k_series',
         }
         cache.set(cls._make_key(state), json.dumps(payload), timeout=cls.TTL_SECONDS)
         return state
